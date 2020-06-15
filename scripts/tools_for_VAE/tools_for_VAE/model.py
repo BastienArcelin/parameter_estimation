@@ -20,6 +20,8 @@ from tensorflow.keras.layers import Conv2D, Input, Dense, Dropout, MaxPool2D, Fl
 import tensorflow as tf
 tfd = tfp.distributions
 
+sys.path.insert(0,'../../scripts/tools_for_VAE/')
+from tools_for_VAE import ktied_distribution
 
 def create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     tfd = tfp.distributions
@@ -79,7 +81,24 @@ def create_model_wo_ls(input_shape, latent_dim, hidden_dim, filters, kernels, fi
 
     return model
 
+
+
+# Probabilistic models
+
+import tensorflow.compat.v1 as tf1
+from tensorflow_probability.python.layers import util as tfp_layers_util
+# Weights initialization for posteriors
+def get_posterior_fn():
+  return tfp_layers_util.default_mean_field_normal_fn(
+      loc_initializer=tf1.initializers.he_normal(), 
+      untransformed_scale_initializer=tf1.initializers.random_normal(
+          mean=-9.0, stddev=0.1)
+      )
+# kernel divergence weight in loss
+kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p) / (128*32))
+
 def create_model_full_prob(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    #tf.keras.backend.set_floatx('float64')
     conv_activation ='tanh' #'softmax' #'sigmoid'#None#'tanh' # 'softmax'
     dense_activation = None #'tanh'#None#'sigmoid'
     
@@ -91,24 +110,23 @@ def create_model_full_prob(input_shape, latent_dim, hidden_dim, filters, kernels
     # Encoding part
     h = BatchNormalization()(input_layer)
     for i in range(len(filters)):
-        h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]), 
-                                            activation=conv_activation, 
-                                            padding='same')(h)
+        # h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]), 
+        #                                     activation=conv_activation, 
+        #                                     padding='same')(h)
+        # h = PReLU()(h)
+        # h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]), 
+        #                                     activation=conv_activation, 
+        #                                     padding='same', 
+        #                                     strides=(2,2))(h)
+        # h = PReLU()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
         h = PReLU()(h)
-        h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]), 
-                                            activation=conv_activation, 
-                                            padding='same', 
-                                            strides=(2,2))(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
         h = PReLU()(h)
+
     h = Flatten()(h)
-    #h = PReLU()(h)
-    #h = tfp.layers.DenseFlipout(64)(h)
-    #h = PReLU()(h)
-    #h = tfp.layers.DenseFlipout(128)(h)
-    #h = PReLU()(h)
-    #h = tfp.layers.DenseFlipout(64)(h)
-    #h = PReLU()(h)
-    h = tfp.layers.DenseFlipout(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
+    h = tfp.layers.DenseReparameterization(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                                    kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
                                     activation=dense_activation)(h)
     #h = PReLU()(h)
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
@@ -128,29 +146,27 @@ def create_model_full_prob_2(input_shape, latent_dim, hidden_dim, filters, kerne
     # Encoding part
     h = BatchNormalization()(input_layer)
     for i in range(len(filters)):
-        h = tfp.layers.Convolution2DReparameterization(filters[i], (kernels[i],kernels[i]), 
+        h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]),
+                                            kernel_posterior_fn=get_posterior_fn(), kernel_divergence_fn=kernel_divergence_fn,
+                                            #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
                                             activation=conv_activation, 
                                             padding='same')(h)
         h = PReLU()(h)
-        h = tfp.layers.Convolution2DReparameterization(filters[i], (kernels[i],kernels[i]), 
+        h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]),
+                                            kernel_posterior_fn=get_posterior_fn(), kernel_divergence_fn=kernel_divergence_fn,
+                                            #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
                                             activation=conv_activation, 
                                             padding='same', strides=(2,2))(h)
         h = PReLU()(h)
     h = Flatten()(h)
-    h = tfp.layers.DenseReparameterization(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
+    h = tfp.layers.DenseFlipout(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
+                                    kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                    kernel_divergence_fn = kernel_divergence_fn,
                                     activation=None)(h)
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
-    h_1 = tfp.layers.DenseReparameterization(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
-                                    activation=None)(h)
-    h_1 = tfp.layers.MultivariateNormalTriL(final_dim)(h_1)
-    h_2 = tfp.layers.DenseReparameterization(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
-                                    activation=None)(h)
-    h_2 = tfp.layers.MultivariateNormalTriL(final_dim)(h_2)
-    h_3 = tfp.layers.DenseReparameterization(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
-                                    activation=None)(h)
-    h_3 = tfp.layers.MultivariateNormalTriL(final_dim)(h_3)
 
-    model = Model(input_layer,[h,h_1,h2,h_3])
+
+    model = Model(input_layer,h)
     
     return model
 
