@@ -14,31 +14,37 @@ import tensorflow as tf
 from tensorflow.keras import metrics
 
 
+
 ###### Callbacks
 # Create a callback for changing KL coefficient in the loss
+
 class changeAlpha(Callback):
-    def __init__(self, alpha, vae, vae_loss, path):
+    def __init__(self, alpha, network, loss, metric):
         self.epoch = 1
         self.alpha = alpha
-        self.vae = vae
-        self.vae_loss = vae_loss
-        self.path = path
+        self.network = network
+        self.loss = loss
+        self.metric = metric
+        #self.path = path
         #self.epochs = epochs
-    
-    def on_epoch_end(self, alpha, vae):
+    def on_epoch_end(self, alpha, network):
         stable = 10
-        new_alpha = 0.0001
-        if self.epoch > stable and K.get_value(self.alpha)>1e-8 :
-            #coef = self.epoch - (self.epochs + stable)/2
-            #print(coef)
-            new_alpha = K.get_value(self.alpha)/2#1/(1+np.exp(-(coef)))*0.01
+        new_alpha = 0.1
+        if self.epoch > stable and K.get_value(self.alpha)<1 :
+            #if (self.alpha < 1):
+                #new_alpha =1
+            #else:
+            print('Changing loss')
+            new_alpha = K.get_value(self.alpha)+0.01 
             print(new_alpha, self.epoch)
             K.set_value(self.alpha, new_alpha)
-            self.vae.compile('adam', loss=self.vae_loss, metrics=['mse'])
-            K.set_value(self.vae.optimizer.lr, 0.0001)
+            #self.loss = self.loss(alpha)
+            negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)+ sum(self.network.losses) *(K.get_value(self.alpha)-1)
+            self.network.compile('adam', loss=negative_log_likelihood, metrics=['mse', 'acc', self.metric])
+            K.set_value(self.network.optimizer.lr, 0.0001)
             print('loss modified')
             self.epoch = 1
-            np.save(self.path+'alpha', K.get_value(self.alpha))
+            #np.save(self.path+'alpha', K.get_value(self.alpha))
         
         self.epoch +=1
 

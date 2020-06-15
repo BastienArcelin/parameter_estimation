@@ -25,13 +25,13 @@ from tensorflow.keras import backend as K
 
 ######## Parameters
 nb_of_bands = 6
-batch_size = 100 
+batch_size = 128
 
 input_shape = (64, 64, nb_of_bands)
 hidden_dim = 256
 latent_dim = 32
 final_dim = 9
-filters = [32, 64, 128, 256]#, 512]
+filters = [128, 256, 512, 1024]#, 512]
 kernels = [3,3,3,3]#,3]
 
 conv_activation = None
@@ -110,7 +110,7 @@ else:
         #     loss += mse(dists[:,i], x[:,i])
         for i in range(final_dim):
 
-            a = tf.numpy_function(numpy_fcn, [tf.ones([100], tf.float32), tf.convert_to_tensor(x[:,i])], tf.float32)
+            a = tf.numpy_function(numpy_fcn, [tf.ones([batch_size], tf.float32), tf.convert_to_tensor(x[:,i])], tf.float32)
             loss += tf.reduce_mean(a*tf.math.squared_difference(dists.mean()[:,i], x[:,i]))#mse(a*dists[:,i], x[:,i])
     
         return loss
@@ -121,11 +121,11 @@ else:
 
 
 
-net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4), 
-              loss=loss , metrics = ['mse', 'acc'], experimental_run_tf_function=False)
+net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-3), 
+              loss=negative_log_likelihood , metrics = ['mse', 'acc'], experimental_run_tf_function=False)#loss
 
 
-#loading_path = '/sps/lsst/users/barcelin/TFP/weights/blended_multi_3_2/loss/'#blended_multi_3
+#oading_path = '/sps/lsst/users/barcelin/TFP/weights/blended_multi_3_2/loss/'#blended_multi_3
 #latest = tf.train.latest_checkpoint(loading_path)
 #net.load_weights(latest)
 
@@ -141,7 +141,7 @@ callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]
 
 
 ######## Train the network
-hist = net.fit_generator(training_generator, epochs=100, # training
+hist = net.fit_generator(training_generator, epochs=50, # training
           steps_per_epoch=steps_per_epoch,#128
           verbose=1,
           shuffle=True,
