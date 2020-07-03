@@ -58,10 +58,6 @@ def create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_di
     return model
 
 def create_model_wo_ls(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    tfd = tfp.distributions
-    prior = tfd.Independent(tfd.Normal(loc=tf.zeros(latent_dim), scale=1),
-                            reinterpreted_batch_ndims=1)
-
     input_layer = Input(shape=(input_shape)) 
 
     # Encoding part
@@ -72,7 +68,7 @@ def create_model_wo_ls(input_shape, latent_dim, hidden_dim, filters, kernels, fi
         h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
         h = PReLU()(h)
     h = Flatten()(h)
-    # h = PReLu()(h)
+
     h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
                 activation=None)(h)
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
@@ -95,66 +91,59 @@ def get_posterior_fn():
           mean=-9.0, stddev=0.1)
       )
 # kernel divergence weight in loss
-kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p) / (128*32))
+kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p) / (512*32))
 
-def create_model_full_prob(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    #tf.keras.backend.set_floatx('float64')
-    conv_activation ='tanh' #'softmax' #'sigmoid'#None#'tanh' # 'softmax'
-    dense_activation = None #'tanh'#None#'sigmoid'
-    
-    tfd = tfp.distributions
-    prior = tfd.Independent(tfd.Normal(loc=tf.zeros(latent_dim), scale=1),
-                            reinterpreted_batch_ndims=1)
+def create_model_full_prob_rt(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
 
     input_layer = Input(shape=(input_shape)) 
     # Encoding part
     h = BatchNormalization()(input_layer)
     for i in range(len(filters)):
-        # h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]), 
-        #                                     activation=conv_activation, 
-        #                                     padding='same')(h)
-        # h = PReLU()(h)
-        # h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]), 
-        #                                     activation=conv_activation, 
-        #                                     padding='same', 
-        #                                     strides=(2,2))(h)
-        # h = PReLU()(h)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
+        h = tfp.layers.Convolution2DReparameterization(filters[i], (kernels[i],kernels[i]), 
+                                            kernel_posterior_fn=get_posterior_fn(),
+                                            #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                            kernel_divergence_fn=kernel_divergence_fn,
+                                            activation=conv_activation, 
+                                            padding='same')(h)
         h = PReLU()(h)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
+        h = tfp.layers.Convolution2DReparameterization(filters[i], (kernels[i],kernels[i]), 
+                                            kernel_posterior_fn=get_posterior_fn(),
+                                            #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                            kernel_divergence_fn=kernel_divergence_fn,
+                                            activation=conv_activation, 
+                                            padding='same', 
+                                            strides=(2,2))(h)
         h = PReLU()(h)
 
     h = Flatten()(h)
     h = tfp.layers.DenseReparameterization(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
                                     kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                    kernel_divergence_fn = kernel_divergence_fn,
                                     activation=dense_activation)(h)
-    #h = PReLU()(h)
+
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
 
     model = Model(input_layer,h)
     
     return model
 
-def create_model_full_prob_2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    conv_activation = 'tanh'
+def create_model_full_prob_flipout(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     
-    tfd = tfp.distributions
-    prior = tfd.Independent(tfd.Normal(loc=tf.zeros(latent_dim), scale=1),
-                            reinterpreted_batch_ndims=1)
-
     input_layer = Input(shape=(input_shape)) 
     # Encoding part
     h = BatchNormalization()(input_layer)
     for i in range(len(filters)):
         h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]),
-                                            kernel_posterior_fn=get_posterior_fn(), kernel_divergence_fn=kernel_divergence_fn,
+                                            kernel_posterior_fn=get_posterior_fn(),
                                             #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                            kernel_divergence_fn=kernel_divergence_fn,
                                             activation=conv_activation, 
                                             padding='same')(h)
         h = PReLU()(h)
         h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]),
-                                            kernel_posterior_fn=get_posterior_fn(), kernel_divergence_fn=kernel_divergence_fn,
+                                            kernel_posterior_fn=get_posterior_fn(), 
                                             #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                            kernel_divergence_fn=kernel_divergence_fn,
                                             activation=conv_activation, 
                                             padding='same', strides=(2,2))(h)
         h = PReLU()(h)
@@ -170,6 +159,93 @@ def create_model_full_prob_2(input_shape, latent_dim, hidden_dim, filters, kerne
     
     return model
 
+
+# Model with coordinate of target galaxy
+def create_model_wo_ls_with_coord(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(2,)) 
+    # Encoding part
+    #input_layer_2 =tf.keras.layers.Embedding((2,), (64,64,6))(input_layer_2)
+    #h = tf.keras.layers.concatenate([input_layer_1, input_layer_2], axis=-1)
+
+    h = BatchNormalization()(input_layer_1)
+    for i in range(len(filters)):
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
+        h = PReLU()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+    h = Flatten()(h)
+    h = tf.keras.layers.concatenate([h, input_layer_2], axis = -1)
+
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(h)
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+def create_model_wo_ls_with_coord_2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+    # Encoding part
+    #input_layer_2 =tf.keras.layers.Embedding(input_size, (64,64,6))(input_layer_2)
+    #h_2 = Dense(24576, activation = 'sigmoid')(input_layer_2) # test_coord_3
+    #h_2 = Dense(24576)(input_layer_2) # test_coord
+    #h_2 = PReLU()(h_2)
+    #h_2 = Reshape((64,64,6))(h_2)
+    #h = tf.keras.layers.concatenate([input_layer_1, h_2], axis=-1)
+    h = tf.keras.layers.concatenate([input_layer_1, tf.keras.layers.multiply([input_layer_1, input_layer_2])], axis=-1)#input_layer_1+input_layer_2#tf.keras.layers.multiply([input_layer_1, input_layer_2])#
+    h = BatchNormalization()(h)
+    h_2 = input_layer_2#BatchNormalization()(input_layer_2)
+    for i in range(len(filters)):
+        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)#'sigmoid'
+        h_2 = PReLU()(h_2)
+        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h_2)#'sigmoid'
+        h_2 = PReLU()(h_2)
+
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
+        h = PReLU()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+
+        #h = h + tf.keras.layers.multiply([h, h_2])#
+        h = tf.keras.layers.concatenate([h, tf.keras.layers.multiply([h, h_2])], axis=-1)#h + h_2#tf.keras.layers.multiply([h, h_2])#
+    h = Flatten()(h)
+
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(h)
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+
+def create_model_wo_ls_with_coord_3(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+    # Encoding part
+    h = tf.keras.layers.concatenate([input_layer_1, input_layer_2], axis=-1)
+
+    h = BatchNormalization()(h)
+    for i in range(len(filters)):
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
+        h = PReLU()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+    h = Flatten()(h)
+
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(h)
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+
+# For multiple outputs
 
 def create_model_wo_ls_multi(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     tfd = tfp.distributions
@@ -253,31 +329,4 @@ def create_model_wo_ls_multi_2(input_shape, latent_dim, hidden_dim, filters, ker
     return model
 
 
-
-def create_model_peak_detect(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    tfd = tfp.distributions
-    tfpl = tfp.layers
-    prior = tfd.Independent(tfd.Normal(loc=tf.zeros(final_dim), scale=1),
-                            reinterpreted_batch_ndims=1)
-
-    input_layer = Input(shape=(input_shape)) 
-
-    # Encoding part
-    h = BatchNormalization()(input_layer)
-    for i in range(len(filters)):
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
-        h = PReLU()(h)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
-        h = PReLU()(h)
-    h = Flatten()(h)
-
-    # h = tf.keras.layers.Dense(lik_fn.num_activations, activation=None)(h)
-    # h = tfp.layers.DistributionLambda(lik_fn)(h)
-    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-                activation=None)(h)
-    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)#, activity_regularizer=tfpl.KLDivergenceRegularizer(prior, weight=.00001))(h)
-
-    model = Model(input_layer,h)
-
-    return model
 

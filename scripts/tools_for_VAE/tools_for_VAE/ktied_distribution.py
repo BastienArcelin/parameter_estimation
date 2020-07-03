@@ -26,6 +26,7 @@ def ktied_loc_scale_fn(
   
   def _fn(dtype, shape, name, trainable, add_variable_fn):
     """Creates `loc`, `scale` parameters."""
+    print(shape)
     loc = add_variable_fn(
         name=name + '_loc',
         shape=shape,
@@ -91,6 +92,7 @@ def ktied_mean_field_normal_fn(
     else:
       dist = tfd.Normal(loc=loc, scale=scale)
     batch_ndims = tf.size(input=dist.batch_shape_tensor())
+    print(batch_ndims)
     return tfd.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
   return _fn
 
