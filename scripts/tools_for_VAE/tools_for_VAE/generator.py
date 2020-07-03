@@ -119,11 +119,11 @@ class BatchGenerator(tensorflow.keras.utils.Sequence):
 
 
 
-class BatchGenerator_random(tensorflow.keras.utils.Sequence):
+class BatchGenerator_random_coord(tensorflow.keras.utils.Sequence):
     """
     Class to create batch generator for the LSST VAE.
     """
-    def __init__(self, bands, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
         """
         Initialization function
         total_sample_size: size of the whole training (or validation) sample
@@ -141,6 +141,7 @@ class BatchGenerator_random(tensorflow.keras.utils.Sequence):
         self.batch_size = batch_size
         self.list_of_samples = list_of_samples
         self.trainval_or_test = trainval_or_test
+        self.path = path
         
         self.epoch = 0
         self.do_norm = do_norm
@@ -187,9 +188,19 @@ class BatchGenerator_random(tensorflow.keras.utils.Sequence):
         sample_filename = self.list_of_samples[index]
         sample = np.load(sample_filename, mmap_mode = 'c')
         data = pd.read_csv(sample_filename.replace('images.npy','data.csv'))
+        shifts = np.load(self.path+self.trainval_or_test+'/shifts/'+sample_filename[-38:].replace('images.npy','shifts.npy'))
 
-        new_data = data[(np.abs(data['e1'])<=1.) &
-                        (np.abs(data['e2'])<=1) ]
+        data = data.replace(to_replace = 10.,value = 0)
+        #print(data)
+        new_data = data[(np.abs(data['e1_0'])<=1.) &
+                        (np.abs(data['e2_0'])<=1.) &
+                        (np.abs(data['e1_1'])<=1.) &
+                        (np.abs(data['e2_1'])<=1.) &
+                        (np.abs(data['e1_2'])<=1.) &
+                        (np.abs(data['e2_2'])<=1.) &
+                        (np.abs(data['e1_3'])<=1.) &
+                        (np.abs(data['e2_3'])<=1.) ]
+        #print(new_data['nb_blended_gal'])
 
         if self.list_of_weights_e == None:
             indices = np.random.choice(new_data.index, size=self.batch_size, replace=False)
@@ -199,26 +210,124 @@ class BatchGenerator_random(tensorflow.keras.utils.Sequence):
             #print(indices)
         self.produced_samples += len(indices)
 
-        x = sample[indices,1][:,self.bands]
-        #print(x.shape)
-        
         y = np.zeros((self.batch_size, 3))
-        y[:,0] = np.array(new_data['e1'][indices])#np.exp(np.array(new_data['e1'][indices]))*2/(np.max(np.exp(np.array(new_data['e1'][indices]))*2))#np.exp(np.array(new_data['e1'][indices]))*2 # np.array(new_data['e1'][indices])
-        y[:,1] = np.array(new_data['e2'][indices])#np.exp(np.array(new_data['e2'][indices]))*2/(np.max(np.exp(np.array(new_data['e2'][indices]))*2))#np.exp(np.array(new_data['e2'][indices]))*2 # np.array(new_data['e2'][indices]) # 
-        y[:,2] = np.array(new_data['redshift'][indices])#/(np.max(np.array(new_data['redshift'][indices])))
+        x_2 = np.zeros((self.batch_size,2))
+
+        x_1 = sample[indices,1][:,self.bands]
+        # No need for next line as there is always 4 galaxies on the image
+        #sup_1 = np.where(data['nb_blended_gal'][indices]>1)
+        #eq_1 = np.where(data['nb_blended_gal'][indices]==1)
+
+        # x_2[sup_1] = shifts[sup_1,1]
+        # y[sup_1,0] = np.array(new_data['e1_1'][sup_1])
+        # y[sup_1,1] = np.array(new_data['e2_1'][sup_1])
+        # y[sup_1,2] = np.array(new_data['redshift_1'][sup_1]) 
+        #print(new_data['mag_0'], new_data['mag_1'], new_data['mag_2'], new_data['mag_3'])
+
+        x_2 = np.zeros((100,64,64,6))
+
+        #print(x_center)
+    
+        for i in range (100):
+            if new_data['nb_blended_gal'][indices[i]]==1:
+            #     x_center = np.around(shifts[indices,0][i,0]/0.2).astype(int)
+            #     #print(x_center)
+            #     y_center = np.around(shifts[indices,0][i,1]/0.2).astype(int)
+            #     for j in range(6):
+            #         if np.floor(shifts[indices,0][i,0]/0.2).astype(int) == x_center:
+            #             if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+            #                 x_2[i,32+y_center,32+x_center,j]=1
+            #                 x_2[i,32+y_center,32+x_center-1,j]=1
+            #                 x_2[i,32+y_center-1,32+x_center,j]=1
+            #                 x_2[i,32+y_center-1,32+x_center-1,j]=1
+            #             else:
+            #                 x_2[i,32+y_center,32+x_center,j]=1
+            #                 x_2[i,32+y_center,32+x_center-1,j]=1
+            #                 x_2[i,32+y_center+1,32+x_center,j]=1
+            #                 x_2[i,32+y_center+1,32+x_center-1,j]=1
+            #         else:
+            #             if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+            #                 x_2[i,32+y_center,32+x_center,j]=1
+            #                 x_2[i,32+y_center,32+x_center+1,j]=1
+            #                 x_2[i,32+y_center-1,32+x_center,j]=1
+            #                 x_2[i,32+y_center-1,32+x_center+1,j]=1
+            #             else:
+            #                 x_2[i,32+y_center,32+x_center,j]=1
+            #                 x_2[i,32+y_center,32+x_center+1,j]=1
+            #                 x_2[i,32+y_center+1,32+x_center,j]=1
+            #                 x_2[i,32+y_center+1,32+x_center +1,j]=1
+                x_center = np.floor(shifts[indices,0][i,0]/0.2).astype(int)
+                y_center = np.floor(shifts[indices,0][i,1]/0.2).astype(int)
+                for j in range(6):
+                    x_2[i,32+y_center,32+x_center,j]=1
+                    x_2[i,32+y_center+1,32+x_center,j]=1
+                    x_2[i,32+y_center+1,32+x_center+1,j]=1
+                    x_2[i,32+y_center,32+x_center+1,j]=1
+                    x_2[i,32+y_center-1,32+x_center,j]=1
+                    x_2[i,32+y_center-1,32+x_center+1,j]=1
+                    x_2[i,32+y_center-1,32+x_center-1,j]=1
+                    x_2[i,32+y_center+1,32+x_center-1,j]=1
+                    x_2[i,32+y_center,32+x_center-1,j]=1
+
+                y[i,0] = np.exp(np.array(new_data['e1_0'][indices[i]]))*2#np.array(new_data['e1_0'][indices[i]])#np.exp(np.array(new_data['e1_0'][indices[i]]))*2
+                y[i,1] = np.exp(np.array(new_data['e2_0'][indices[i]]))*2#np.array(new_data['e2_0'][indices[i]])#np.exp(np.array(new_data['e2_0'][indices[i]]))*2
+                y[i,2] = np.array(new_data['redshift_0'][indices[i]])
+            else:
+                # x_center = np.around(shifts[indices,1][i,0]/0.2).astype(int)
+                # #print(x_center)
+                # y_center = np.around(shifts[indices,1][i,1]/0.2).astype(int)
+                # for j in range(6):
+                    # if np.floor(shifts[indices,0][i,0]/0.2).astype(int) == x_center:
+                    #     if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+                    #         x_2[i,32+y_center,32+x_center,j]=1
+                    #         x_2[i,32+y_center,32+x_center-1,j]=1
+                    #         x_2[i,32+y_center-1,32+x_center,j]=1
+                    #         x_2[i,32+y_center-1,32+x_center-1,j]=1
+                    #     else:
+                    #         x_2[i,32+y_center,32+x_center,j]=1
+                    #         x_2[i,32+y_center,32+x_center-1,j]=1
+                    #         x_2[i,32+y_center+1,32+x_center,j]=1
+                    #         x_2[i,32+y_center+1,32+x_center-1,j]=1
+                    # else:
+                    #     if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+                    #         x_2[i,32+y_center,32+x_center,j]=1
+                    #         x_2[i,32+y_center,32+x_center+1,j]=1
+                    #         x_2[i,32+y_center-1,32+x_center,j]=1
+                    #         x_2[i,32+y_center-1,32+x_center+1,j]=1
+                    #     else:
+                    #         x_2[i,32+y_center,32+x_center,j]=1
+                    #         x_2[i,32+y_center,32+x_center+1,j]=1
+                    #         x_2[i,32+y_center+1,32+x_center,j]=1
+                    #         x_2[i,32+y_center+1,32+x_center+1,j]=1
+                x_center = np.floor(shifts[indices,1][i,0]/0.2).astype(int)
+                y_center = np.floor(shifts[indices,1][i,1]/0.2).astype(int)
+                for j in range(6):
+                    x_2[i,32+y_center,32+x_center,j]=1
+                    x_2[i,32+y_center+1,32+x_center,j]=1
+                    x_2[i,32+y_center+1,32+x_center+1,j]=1
+                    x_2[i,32+y_center,32+x_center+1,j]=1
+                    x_2[i,32+y_center-1,32+x_center,j]=1
+                    x_2[i,32+y_center-1,32+x_center+1,j]=1
+                    x_2[i,32+y_center-1,32+x_center-1,j]=1
+                    x_2[i,32+y_center+1,32+x_center-1,j]=1
+                    x_2[i,32+y_center,32+x_center-1,j]=1
+
+                y[i,0] = np.exp(np.array(new_data['e1_1'][indices[i]]))*2#np.array(new_data['e1_1'][indices[i]])#
+                y[i,1] = np.exp(np.array(new_data['e2_1'][indices[i]]))*2#np.array(new_data['e2_1'][indices[i]])#np.exp(np.array(new_data['e2_1'][indices[i]]))*2
+                y[i,2] = np.array(new_data['redshift_1'][indices[i]])
         
         # Preprocessing of the data to be easier for the network to learn
         if self.do_norm:
-            x = utils.norm(x, self.bands, n_years = 5)
+            x_1 = utils.norm(x_1, self.bands, n_years = 5)
         if self.denorm:
-            x = utils.denorm(x, self.bands, n_years = 5)
+            x_1 = utils.denorm(x_1, self.bands, n_years = 5)
         
-        x = np.transpose(x, axes = (0,2,3,1))
+        x_1 = np.transpose(x_1, axes = (0,2,3,1))
         
         if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
-            return x, y
+            return [x_1, x_2], y
         elif self.trainval_or_test == 'test':
-            return x, y#, data.loc[indices], indices
+            return [x_1, x_2], y
 
 
 
