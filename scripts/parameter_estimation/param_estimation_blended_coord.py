@@ -21,12 +21,13 @@ sys.path.insert(0,'../../scripts/tools_for_VAE/')
 import tools_for_VAE.layers as layers
 from tools_for_VAE import utils, vae_functions, generator, model
 from tools_for_VAE.callbacks import changeAlpha
+import tensorflow.keras as keras
 from tensorflow.keras import backend as K
 
 
 ######## Parameters
 nb_of_bands = 6
-batch_size = 100
+batch_size = 256
 
 input_shape = (64, 64, nb_of_bands)
 hidden_dim = 256
@@ -42,34 +43,6 @@ steps_per_epoch = 32
 validation_steps = 8
 
 bands = [4,5,6,7,8,9]
-
-
-#### Loading data
-# Direct loading
-# data = np.load('/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/isolated_galaxies/centered/training/galaxies_isolated_20191024_0_images.npy', mmap_mode = 'c')
-# labels = pd.read_csv('/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/isolated_galaxies/centered/training/galaxies_isolated_20191024_0_data.csv')
-
-# temp_labels = labels[(np.abs(labels['e1'])<=1.) & (np.abs(labels['e2'])<=1)]
-# e1 = np.exp(np.array(temp_labels['e1']))*2
-# e2 = np.exp(np.array(temp_labels['e2']))*2
-# z = np.array(temp_labels['redshift'])
-
-# new_labels = np.zeros((len(e1),final_dim))
-# new_labels[:,0] = e1
-# new_labels[:,1] = e2
-# new_labels[:,2] = z
-# print(new_labels.shape)
-# #new_labels = np.array(new_labels['e1'])
-
-# training_data = data[:2000,1,4:]
-# training_data = np.transpose(training_data, axes = (0,2,3,1))
-# validation_data = data[2000:2500,1,4:]
-# validation_data = np.transpose(validation_data, axes = (0,2,3,1))
-
-# training_labels = new_labels[:2000]
-# validation_labels = new_labels[2000:2500]
-
-
 
 # With generator
 images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
@@ -109,6 +82,56 @@ test_generator = generator.BatchGenerator_random_coord(bands,
                                     denorm = False,
                                     list_of_weights_e=None)
 
+
+# NEW: Wrap the generator.BatchGenerator objects in a generator-style function
+# which we can then pass to tf.data.Dataset.from_generator()
+# (One per train/val/test dataset at the moment, but could be refactored for neatness!)
+def training_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(training_generator,
+                                                use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+def validation_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(validation_generator,
+                                                    use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+def test_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(test_generator,
+                                                    use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+# Recommended to specify the expected output shapes and types here
+# output_types = ((tf.float32, tf.float32), tf.float32)
+# output_shapes = ((tf.TensorShape([batch_size, 64, 64, nb_of_bands]),tf.TensorShape([batch_size, 64, 64, nb_of_bands])),
+#                     tf.TensorShape([batch_size, 3]))
+output_types = ((tf.float32,tf.float32), tf.float32)
+output_shapes = ((tf.TensorShape([batch_size, 64, 64, nb_of_bands]),tf.TensorShape([batch_size, 64, 64, nb_of_bands])),
+                tf.TensorShape([batch_size, 3]))
+
+training_ds = tf.data.Dataset.from_generator(training_batch_generator,
+                                                output_types=output_types,
+                                                output_shapes=output_shapes).repeat()
+
+validation_ds = tf.data.Dataset.from_generator(validation_batch_generator,
+                                                output_types=output_types,
+                                                output_shapes=output_shapes).repeat()
+
+test_ds = tf.data.Dataset.from_generator(test_batch_generator,
+                                            output_types=output_types,
+                                            output_shapes=output_shapes).repeat()
+
+print('construction OK')
+#print('construction OK: '+str((iter(test_ds))))
 #### Model definition
 model_choice = 'wo_ls'
 # With latent space
@@ -147,21 +170,19 @@ else:
 def kl_metric(y_true, y_pred):
     return K.sum(net.losses)
 
-net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-3), 
+net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4), 
               loss=negative_log_likelihood , metrics = ['mse', 'acc', kl_metric], experimental_run_tf_function=False)
 
 
-## /test_3/ : with beta = 0.01 , lr = 10-3
-## /test_2/ : with beta = 1.
 # if str(sys.argv[3]).lower() == 'true':
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_1/loss/'#test_coord_4/mse/
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/loss/'#test_coord_2/loss/  # test_coord_1/loss/
 print(loading_path)
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_1'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4'
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
@@ -172,17 +193,28 @@ callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, alpha_chan
 
 
 ######## Train the network
-hist = net.fit_generator(training_generator, epochs=50, # training
-          steps_per_epoch=steps_per_epoch,#128
-          verbose=1,
-          shuffle=True,
-          validation_data=validation_generator, # validation
-          validation_steps=validation_steps,#16
-          callbacks= callbacks,
-          workers=0,#4 
-          use_multiprocessing = True)
+## With dataset (faster than directly from generator)
+hist = net.fit(training_ds, epochs=100,
+                    steps_per_epoch=steps_per_epoch,
+                    verbose=1,
+                    shuffle=True,
+                    callbacks = callbacks,
+                    validation_data=validation_ds,
+                    validation_steps=validation_steps)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_1/'
+## Directly from generator
+# hist = net.fit_generator(training_generator, #training_generator
+#           epochs=10, 
+#           steps_per_epoch=steps_per_epoch,
+#           verbose=1,
+#           shuffle=True,
+#           validation_data=validation_generator, #validation_generator
+#           validation_steps=validation_steps,
+#           callbacks= callbacks,
+#           workers=0,
+#           use_multiprocessing = True)
+
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/'
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 
@@ -190,21 +222,7 @@ net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 # training
 
 ## REGENERER AVEC NOUVELLES IMAGES ET RENORMALISATION CORRECTE
-# n_batch = 2
-# test = np.zeros((2, n_batch*100))
-
-# testing_data = np.zeros((n_batch*100, 64, 64, 6))
-# testing_labels = np.zeros((n_batch*100, final_dim))
-
-# for i in range (n_batch):
-#     print(i)
-#     testing_data[i*batch_size:(i+1)*batch_size]=test_generator.__getitem__(2)[0]
-#     testing_labels[i*batch_size:(i+1)*batch_size]=test_generator.__getitem__(2)[1]
-
-#test = np.concatenate(test, axis = 1)
-#print(test.shape)
-
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_1/loss/'#test_5
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/mse/'#test_5
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 test = test_generator.__getitem__(2)
@@ -233,31 +251,35 @@ fig.savefig('full_prob/test_distrib_e3.png')
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-axes[0].plot(training_labels[:,0], K.get_value(out.mean())[:,0], '.', label = 'mean')# out.mean().numpy()
-axes[0].plot(training_labels[:,0], K.get_value(out.mean())[:,0]+ 2*K.get_value(out.stddev())[:,0], '+', label = 'mean + 2stddev')# out.mean().numpy()
-axes[0].plot(training_labels[:,0], K.get_value(out.mean())[:,0]- 2*K.get_value(out.stddev())[:,0], '+', label = 'mean - 2stddev')# out.mean().numpy()
-x = np.linspace(0,5)#-0,5
+nb_of_points = 100
+axes[0].errorbar(training_labels[:nb_of_points,0], K.get_value(out.mean())[:nb_of_points,0], yerr = 2*K.get_value(out.stddev())[:nb_of_points,0],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
+#axes[0].plot(training_labels[:,0], K.get_value(out.mean())[:,0], '.', label = 'mean')# out.mean().numpy()
+#axes[0].plot(training_labels[:,0], K.get_value(out.mean())[:,0]+ 2*K.get_value(out.stddev())[:,0], '+', label = 'mean + 2stddev')# out.mean().numpy()
+#axes[0].plot(training_labels[:,0], K.get_value(out.mean())[:,0]- 2*K.get_value(out.stddev())[:,0], '+', label = 'mean - 2stddev')# out.mean().numpy()
+x = np.linspace(-1,1)#-0,5
 axes[0].plot(x, x)
 axes[0].legend()
-axes[0].set_ylim(0,5)#-1,1
+axes[0].set_ylim(-1,1)#-1,1
 axes[0].set_title('$e1$')
 
-axes[1].plot(training_labels[:,1], K.get_value(out.mean())[:,1], '.', label = 'mean')# out.mean().numpy()
-axes[1].plot(training_labels[:,1], K.get_value(out.mean())[:,1]+ 2*K.get_value(out.stddev())[:,1], '+', label = 'mean + 2stddev')# out.mean().numpy()
-axes[1].plot(training_labels[:,1], K.get_value(out.mean())[:,1]- 2*K.get_value(out.stddev())[:,1], '+', label = 'mean - 2stddev')# out.mean().numpy()
-x = np.linspace(0,5)#-1,1
+axes[1].errorbar(training_labels[:nb_of_points,1], K.get_value(out.mean())[:nb_of_points,1], yerr = 2*K.get_value(out.stddev())[:nb_of_points,1],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
+# axes[1].plot(training_labels[:,1], K.get_value(out.mean())[:,1], '.', label = 'mean')# out.mean().numpy()
+# axes[1].plot(training_labels[:,1], K.get_value(out.mean())[:,1]+ 2*K.get_value(out.stddev())[:,1], '+', label = 'mean + 2stddev')# out.mean().numpy()
+# axes[1].plot(training_labels[:,1], K.get_value(out.mean())[:,1]- 2*K.get_value(out.stddev())[:,1], '+', label = 'mean - 2stddev')# out.mean().numpy()
+x = np.linspace(-1,1)#-1,1
 axes[1].plot(x, x)
 axes[1].legend()
-axes[1].set_ylim(0,5)#-1,1
+axes[1].set_ylim(-1,1)#-1,1
 axes[1].set_title('$e2$')
 
-axes[2].plot(training_labels[:,2], K.get_value(out.mean())[:,2], '.', label = 'mean')# out.mean().numpy()
-axes[2].plot(training_labels[:,2], K.get_value(out.mean())[:,2]+ 2*K.get_value(out.stddev())[:,2], '+', label = 'mean + 2stddev')# out.mean().numpy()
-axes[2].plot(training_labels[:,2], K.get_value(out.mean())[:,2]- 2*K.get_value(out.stddev())[:,2], '+', label = 'mean - 2stddev')# out.mean().numpy()
-x = np.linspace(0,4)
+axes[2].errorbar(training_labels[:nb_of_points,2], K.get_value(out.mean())[:nb_of_points,2], yerr = 2*K.get_value(out.stddev())[:nb_of_points,2],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
+# axes[2].plot(training_labels[:,2], K.get_value(out.mean())[:,2], '.', label = 'mean')# out.mean().numpy()
+# axes[2].plot(training_labels[:,2], K.get_value(out.mean())[:,2]+ 2*K.get_value(out.stddev())[:,2], '+', label = 'mean + 2stddev')# out.mean().numpy()
+# axes[2].plot(training_labels[:,2], K.get_value(out.mean())[:,2]- 2*K.get_value(out.stddev())[:,2], '+', label = 'mean - 2stddev')# out.mean().numpy()
+x = np.linspace(-3,4)
 axes[2].plot(x, x)
 axes[2].legend()
-axes[2].set_ylim(-1,5.5)
+axes[2].set_ylim(-3,3)
 axes[2].set_title('$z$')
 
 fig.savefig('full_prob/test_train.png')
