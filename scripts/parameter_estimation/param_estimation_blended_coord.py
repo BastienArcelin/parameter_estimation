@@ -133,19 +133,19 @@ test_ds = tf.data.Dataset.from_generator(test_batch_generator,
 print('construction OK')
 #print('construction OK: '+str((iter(test_ds))))
 #### Model definition
-model_choice = 'wo_ls'
+model_choice = 'full_prob_flipout'
 # With latent space
 if model_choice == 'ls':
     net = model.create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 # Without latent space
 if model_choice == 'wo_ls':
-    net = model.create_model_wo_ls_with_coord_2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+    net = model.create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 # Full probabilistic model with reparametrization trick
 if model_choice == 'full_prob_rt':
-    net = model.create_model_full_prob_rt(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+    net = model.create_model_prob_rt_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 # Full probabilistic model with flipout
 if model_choice == 'full_prob_flipout':
-    net = model.create_model_full_prob_flipout(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+    net = model.create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 net.summary()
 
 #### Loss definition
@@ -175,10 +175,10 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4),
 
 
 # if str(sys.argv[3]).lower() == 'true':
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/loss/'#test_coord_2/loss/  # test_coord_1/loss/
-print(loading_path)
-latest = tf.train.latest_checkpoint(loading_path)
-net.load_weights(latest)
+#loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/loss/'#test_coord_2/loss/  # test_coord_1/loss/
+#print(loading_path)
+#latest = tf.train.latest_checkpoint(loading_path)
+#net.load_weights(latest)
 
 
 # Callbacks
