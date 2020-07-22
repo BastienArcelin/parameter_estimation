@@ -189,12 +189,6 @@ def create_model_wo_ls_with_coord_2(input_shape, latent_dim, hidden_dim, filters
     input_layer_1 = Input(shape=(input_shape)) 
     input_layer_2 = Input(shape=(input_shape)) 
     # Encoding part
-    #input_layer_2 =tf.keras.layers.Embedding(input_size, (64,64,6))(input_layer_2)
-    #h_2 = Dense(24576, activation = 'sigmoid')(input_layer_2) # test_coord_3
-    #h_2 = Dense(24576)(input_layer_2) # test_coord
-    #h_2 = PReLU()(h_2)
-    #h_2 = Reshape((64,64,6))(h_2)
-    #h = tf.keras.layers.concatenate([input_layer_1, h_2], axis=-1)
     h = tf.keras.layers.concatenate([input_layer_1, tf.keras.layers.multiply([input_layer_1, input_layer_2])], axis=-1)#input_layer_1+input_layer_2#tf.keras.layers.multiply([input_layer_1, input_layer_2])#
     h = BatchNormalization()(h)
     h_2 = input_layer_2#BatchNormalization()(input_layer_2)
@@ -209,8 +203,9 @@ def create_model_wo_ls_with_coord_2(input_shape, latent_dim, hidden_dim, filters
         h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
         h = PReLU()(h)
 
-        #h = h + tf.keras.layers.multiply([h, h_2])#
-        h = tf.keras.layers.concatenate([h, tf.keras.layers.multiply([h, h_2])], axis=-1)#h + h_2#tf.keras.layers.multiply([h, h_2])#
+        h = tf.keras.layers.concatenate([h, h_2], axis =-1)
+        #h = tf.keras.layers.concatenate([h, tf.keras.layers.multiply([h, h_2])], axis=-1)
+    #h = h + tf.keras.layers.multiply([h, h_2])
     h = Flatten()(h)
 
     h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),

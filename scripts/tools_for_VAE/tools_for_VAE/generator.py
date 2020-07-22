@@ -14,6 +14,7 @@ from random import choice
 
 sys.path.insert(0,'../tools_for_VAE/')
 from tools_for_VAE import utils
+import tensorflow as tf
 
 
 class BatchGenerator(tensorflow.keras.utils.Sequence):
@@ -214,107 +215,109 @@ class BatchGenerator_random_coord(tensorflow.keras.utils.Sequence):
         x_2 = np.zeros((self.batch_size,2))
 
         x_1 = sample[indices,1][:,self.bands]
-        # No need for next line as there is always 4 galaxies on the image
-        #sup_1 = np.where(data['nb_blended_gal'][indices]>1)
-        #eq_1 = np.where(data['nb_blended_gal'][indices]==1)
 
-        # x_2[sup_1] = shifts[sup_1,1]
-        # y[sup_1,0] = np.array(new_data['e1_1'][sup_1])
-        # y[sup_1,1] = np.array(new_data['e2_1'][sup_1])
-        # y[sup_1,2] = np.array(new_data['redshift_1'][sup_1]) 
-        #print(new_data['mag_0'], new_data['mag_1'], new_data['mag_2'], new_data['mag_3'])
-
-        x_2 = np.zeros((100,64,64,6))
+        x_2 = np.zeros((self.batch_size,64,64,6))
 
         #print(x_center)
     
-        for i in range (100):
+        for i in range (self.batch_size):
             if new_data['nb_blended_gal'][indices[i]]==1:
-            #     x_center = np.around(shifts[indices,0][i,0]/0.2).astype(int)
-            #     #print(x_center)
-            #     y_center = np.around(shifts[indices,0][i,1]/0.2).astype(int)
-            #     for j in range(6):
-            #         if np.floor(shifts[indices,0][i,0]/0.2).astype(int) == x_center:
-            #             if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
-            #                 x_2[i,32+y_center,32+x_center,j]=1
-            #                 x_2[i,32+y_center,32+x_center-1,j]=1
-            #                 x_2[i,32+y_center-1,32+x_center,j]=1
-            #                 x_2[i,32+y_center-1,32+x_center-1,j]=1
-            #             else:
-            #                 x_2[i,32+y_center,32+x_center,j]=1
-            #                 x_2[i,32+y_center,32+x_center-1,j]=1
-            #                 x_2[i,32+y_center+1,32+x_center,j]=1
-            #                 x_2[i,32+y_center+1,32+x_center-1,j]=1
-            #         else:
-            #             if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
-            #                 x_2[i,32+y_center,32+x_center,j]=1
-            #                 x_2[i,32+y_center,32+x_center+1,j]=1
-            #                 x_2[i,32+y_center-1,32+x_center,j]=1
-            #                 x_2[i,32+y_center-1,32+x_center+1,j]=1
-            #             else:
-            #                 x_2[i,32+y_center,32+x_center,j]=1
-            #                 x_2[i,32+y_center,32+x_center+1,j]=1
-            #                 x_2[i,32+y_center+1,32+x_center,j]=1
-            #                 x_2[i,32+y_center+1,32+x_center +1,j]=1
-                x_center = np.floor(shifts[indices,0][i,0]/0.2).astype(int)
-                y_center = np.floor(shifts[indices,0][i,1]/0.2).astype(int)
+                x_center = np.around(shifts[indices,0][i,0]/0.2).astype(int)
+                #print(x_center)
+                y_center = np.around(shifts[indices,0][i,1]/0.2).astype(int)
                 for j in range(6):
-                    x_2[i,32+y_center,32+x_center,j]=1
-                    x_2[i,32+y_center+1,32+x_center,j]=1
-                    x_2[i,32+y_center+1,32+x_center+1,j]=1
-                    x_2[i,32+y_center,32+x_center+1,j]=1
-                    x_2[i,32+y_center-1,32+x_center,j]=1
-                    x_2[i,32+y_center-1,32+x_center+1,j]=1
-                    x_2[i,32+y_center-1,32+x_center-1,j]=1
-                    x_2[i,32+y_center+1,32+x_center-1,j]=1
-                    x_2[i,32+y_center,32+x_center-1,j]=1
-
-                y[i,0] = np.exp(np.array(new_data['e1_0'][indices[i]]))*2#np.array(new_data['e1_0'][indices[i]])#np.exp(np.array(new_data['e1_0'][indices[i]]))*2
-                y[i,1] = np.exp(np.array(new_data['e2_0'][indices[i]]))*2#np.array(new_data['e2_0'][indices[i]])#np.exp(np.array(new_data['e2_0'][indices[i]]))*2
-                y[i,2] = np.array(new_data['redshift_0'][indices[i]])
-            else:
-                # x_center = np.around(shifts[indices,1][i,0]/0.2).astype(int)
-                # #print(x_center)
-                # y_center = np.around(shifts[indices,1][i,1]/0.2).astype(int)
+                    if np.floor(shifts[indices,0][i,0]/0.2).astype(int) == x_center:
+                        if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center-1,j]=1
+                            x_2[i,32+y_center-1,32+x_center,j]=1
+                            x_2[i,32+y_center-1,32+x_center-1,j]=1
+                        else:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center-1,j]=1
+                            x_2[i,32+y_center+1,32+x_center,j]=1
+                            x_2[i,32+y_center+1,32+x_center-1,j]=1
+                    else:
+                        if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center+1,j]=1
+                            x_2[i,32+y_center-1,32+x_center,j]=1
+                            x_2[i,32+y_center-1,32+x_center+1,j]=1
+                        else:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center+1,j]=1
+                            x_2[i,32+y_center+1,32+x_center,j]=1
+                            x_2[i,32+y_center+1,32+x_center +1,j]=1
+                # x_center = np.floor(shifts[indices,0][i,0]/0.2).astype(int)
+                # y_center = np.floor(shifts[indices,0][i,1]/0.2).astype(int)
                 # for j in range(6):
-                    # if np.floor(shifts[indices,0][i,0]/0.2).astype(int) == x_center:
-                    #     if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
-                    #         x_2[i,32+y_center,32+x_center,j]=1
-                    #         x_2[i,32+y_center,32+x_center-1,j]=1
-                    #         x_2[i,32+y_center-1,32+x_center,j]=1
-                    #         x_2[i,32+y_center-1,32+x_center-1,j]=1
-                    #     else:
-                    #         x_2[i,32+y_center,32+x_center,j]=1
-                    #         x_2[i,32+y_center,32+x_center-1,j]=1
-                    #         x_2[i,32+y_center+1,32+x_center,j]=1
-                    #         x_2[i,32+y_center+1,32+x_center-1,j]=1
-                    # else:
-                    #     if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
-                    #         x_2[i,32+y_center,32+x_center,j]=1
-                    #         x_2[i,32+y_center,32+x_center+1,j]=1
-                    #         x_2[i,32+y_center-1,32+x_center,j]=1
-                    #         x_2[i,32+y_center-1,32+x_center+1,j]=1
-                    #     else:
-                    #         x_2[i,32+y_center,32+x_center,j]=1
-                    #         x_2[i,32+y_center,32+x_center+1,j]=1
-                    #         x_2[i,32+y_center+1,32+x_center,j]=1
-                    #         x_2[i,32+y_center+1,32+x_center+1,j]=1
-                x_center = np.floor(shifts[indices,1][i,0]/0.2).astype(int)
-                y_center = np.floor(shifts[indices,1][i,1]/0.2).astype(int)
-                for j in range(6):
-                    x_2[i,32+y_center,32+x_center,j]=1
-                    x_2[i,32+y_center+1,32+x_center,j]=1
-                    x_2[i,32+y_center+1,32+x_center+1,j]=1
-                    x_2[i,32+y_center,32+x_center+1,j]=1
-                    x_2[i,32+y_center-1,32+x_center,j]=1
-                    x_2[i,32+y_center-1,32+x_center+1,j]=1
-                    x_2[i,32+y_center-1,32+x_center-1,j]=1
-                    x_2[i,32+y_center+1,32+x_center-1,j]=1
-                    x_2[i,32+y_center,32+x_center-1,j]=1
+                #     x_2[i,32+y_center,32+x_center,j]=1
+                #     x_2[i,32+y_center+1,32+x_center,j]=1
+                #     x_2[i,32+y_center+1,32+x_center+1,j]=1
+                #     x_2[i,32+y_center,32+x_center+1,j]=1
+                #     x_2[i,32+y_center-1,32+x_center,j]=1
+                #     x_2[i,32+y_center-1,32+x_center+1,j]=1
+                #     x_2[i,32+y_center-1,32+x_center-1,j]=1
+                #     x_2[i,32+y_center+1,32+x_center-1,j]=1
+                #     x_2[i,32+y_center,32+x_center-1,j]=1
 
-                y[i,0] = np.exp(np.array(new_data['e1_1'][indices[i]]))*2#np.array(new_data['e1_1'][indices[i]])#
-                y[i,1] = np.exp(np.array(new_data['e2_1'][indices[i]]))*2#np.array(new_data['e2_1'][indices[i]])#np.exp(np.array(new_data['e2_1'][indices[i]]))*2
-                y[i,2] = np.array(new_data['redshift_1'][indices[i]])
+                # Fit a normal distribution to the data:
+                mu_e1, std_e1 = -0.0006810325532907882, 0.27972312880305217#norm.fit(new_data['e1_0'])
+                mu_e2, std_e2 = -0.0016197468011117963, 0.2805471962898235#norm.fit(new_data['e2_0'])
+                mu_z, std_z = -0.4894036491965116, 0.7709336177955792#norm.fit(np.log(new_data['redshift_0']))
+
+                y[i,0] = np.array(new_data['e1_0'][indices[i]])#(np.array(new_data['e1_0'][indices[i]])-mu_e1)/std_e1#np.exp(np.array(new_data['e1_0'][indices[i]]))*2
+                y[i,1] = np.array(new_data['e2_0'][indices[i]])#(np.array(new_data['e2_0'][indices[i]])-mu_e2)/std_e2#np.exp(np.array(new_data['e2_0'][indices[i]]))*2
+                y[i,2] = np.log(np.array(new_data['redshift_0'][indices[i]]))#(np.log(np.array(new_data['redshift_0'][indices[i]]))-mu_z)/std_z
+            else:
+                x_center = np.around(shifts[indices,1][i,0]/0.2).astype(int)
+                #print(x_center)
+                y_center = np.around(shifts[indices,1][i,1]/0.2).astype(int)
+                for j in range(6):
+                    if np.floor(shifts[indices,0][i,0]/0.2).astype(int) == x_center:
+                        if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center-1,j]=1
+                            x_2[i,32+y_center-1,32+x_center,j]=1
+                            x_2[i,32+y_center-1,32+x_center-1,j]=1
+                        else:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center-1,j]=1
+                            x_2[i,32+y_center+1,32+x_center,j]=1
+                            x_2[i,32+y_center+1,32+x_center-1,j]=1
+                    else:
+                        if np.floor(shifts[indices,0][i,1]/0.2).astype(int) == y_center:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center+1,j]=1
+                            x_2[i,32+y_center-1,32+x_center,j]=1
+                            x_2[i,32+y_center-1,32+x_center+1,j]=1
+                        else:
+                            x_2[i,32+y_center,32+x_center,j]=1
+                            x_2[i,32+y_center,32+x_center+1,j]=1
+                            x_2[i,32+y_center+1,32+x_center,j]=1
+                            x_2[i,32+y_center+1,32+x_center+1,j]=1
+                # x_center = np.floor(shifts[indices,1][i,0]/0.2).astype(int)
+                # y_center = np.floor(shifts[indices,1][i,1]/0.2).astype(int)
+                # for j in range(6):
+                #     x_2[i,32+y_center,32+x_center,j]=1
+                #     x_2[i,32+y_center+1,32+x_center,j]=1
+                #     x_2[i,32+y_center+1,32+x_center+1,j]=1
+                #     x_2[i,32+y_center,32+x_center+1,j]=1
+                #     x_2[i,32+y_center-1,32+x_center,j]=1
+                #     x_2[i,32+y_center-1,32+x_center+1,j]=1
+                #     x_2[i,32+y_center-1,32+x_center-1,j]=1
+                #     x_2[i,32+y_center+1,32+x_center-1,j]=1
+                #     x_2[i,32+y_center,32+x_center-1,j]=1
+
+
+                # Fit a normal distribution to the data:
+                mu_e1, std_e1 = -0.0006810325532907882, 0.27972312880305217#norm.fit(new_data['e1_0'])
+                mu_e2, std_e2 = -0.0016197468011117963, 0.2805471962898235#norm.fit(new_data['e2_0'])
+                mu_z, std_z = -0.4894036491965116, 0.7709336177955792#norm.fit(np.log(new_data['redshift_0']))
+
+                y[i,0] = np.array(new_data['e1_0'][indices[i]])#(np.array(new_data['e1_1'][indices[i]])-mu_e1)/std_e1#np.exp(np.array(new_data['e1_0'][indices[i]]))*2
+                y[i,1] = np.array(new_data['e2_0'][indices[i]])#(np.array(new_data['e2_1'][indices[i]])-mu_e2)/std_e2#np.exp(np.array(new_data['e2_0'][indices[i]]))*2
+                y[i,2] = np.log(np.array(new_data['redshift_1'][indices[i]]))#(np.log(np.array(new_data['redshift_1'][indices[i]]))-mu_z)/std_z
         
         # Preprocessing of the data to be easier for the network to learn
         if self.do_norm:
@@ -325,9 +328,9 @@ class BatchGenerator_random_coord(tensorflow.keras.utils.Sequence):
         x_1 = np.transpose(x_1, axes = (0,2,3,1))
         
         if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
-            return [x_1, x_2], y
+            return (x_1, x_2), y#[tf.cast(x_1, tf.float32), tf.cast(x_2, tf.float32)], tf.cast(y, tf.float32)
         elif self.trainval_or_test == 'test':
-            return [x_1, x_2], y
+            return (x_1, x_2), y
 
 
 

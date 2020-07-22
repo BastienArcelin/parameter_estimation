@@ -22,11 +22,12 @@ import tools_for_VAE.layers as layers
 from tools_for_VAE import utils, vae_functions, generator, model
 from tools_for_VAE.callbacks import changeAlpha
 from tensorflow.keras import backend as K
+import tensorflow.keras as keras
 
 
 ######## Parameters
 nb_of_bands = 6
-batch_size = 512 
+batch_size = 8
 
 input_shape = (64, 64, nb_of_bands)
 hidden_dim = 256
@@ -38,8 +39,8 @@ kernels = [3,3,3,3]#, 3]
 conv_activation = None
 dense_activation = None
 
-steps_per_epoch = 32
-validation_steps = 8
+steps_per_epoch = 512
+validation_steps = 64
 
 bands = [4,5,6,7,8,9]
 
@@ -99,6 +100,52 @@ test_generator = generator.BatchGenerator(bands, list_of_samples_test, total_sam
                                     do_norm=False,
                                     denorm = False,
                                     list_of_weights_e=None)
+
+# NEW: Wrap the generator.BatchGenerator objects in a generator-style function
+# which we can then pass to tf.data.Dataset.from_generator()
+# (One per train/val/test dataset at the moment, but could be refactored for neatness!)
+def training_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(training_generator,
+                                                use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+def validation_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(validation_generator,
+                                                    use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+def test_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(test_generator,
+                                                    use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+# Recommended to specify the expected output shapes and types here
+output_types = (tf.float32, tf.float32)
+output_shapes = (tf.TensorShape([batch_size, 64, 64, nb_of_bands]),
+                    tf.TensorShape([batch_size, 3]))
+
+training_ds = tf.data.Dataset.from_generator(training_batch_generator,
+                                                output_types=output_types,
+                                                output_shapes=output_shapes).repeat()
+
+validation_ds = tf.data.Dataset.from_generator(validation_batch_generator,
+                                                output_types=output_types,
+                                                output_shapes=output_shapes).repeat()
+
+test_ds = tf.data.Dataset.from_generator(test_batch_generator,
+                                            output_types=output_types,
+                                            output_shapes=output_shapes).repeat()
+
+
 
 #### Model definition
 model_choice = str(sys.argv[1]).lower()
@@ -163,18 +210,27 @@ callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc, alpha_change
 
 
 ######## Train the network
-hist = net.fit_generator(training_generator, epochs=int(sys.argv[4]), # training
-          steps_per_epoch=steps_per_epoch,#128
-          verbose=2,
-          shuffle=True,
-          validation_data=validation_generator, # validation
-          validation_steps=validation_steps,#16
-          #callbacks= callbacks,
-          workers=0,#4 
-          use_multiprocessing = True)
+## From dataset
+hist = net.fit(training_ds, epochs=int(sys.argv[4]),
+                    steps_per_epoch=steps_per_epoch,
+                    verbose=1,
+                    shuffle=True,
+                    validation_data=validation_ds,
+                    validation_steps=validation_steps)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/'+str(sys.argv[2]).lower()#test_5
-net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
+## From generator
+# hist = net.fit_generator(training_generator, epochs=int(sys.argv[4]),
+#           steps_per_epoch=steps_per_epoch,
+#           verbose=2,
+#           shuffle=True,
+#           validation_data=validation_generator,
+#           validation_steps=validation_steps,#16
+#           callbacks= callbacks,
+#           workers=0,
+#           use_multiprocessing = True)
+
+#saving_path = '/sps/lsst/users/barcelin/TFP/weights/'+str(sys.argv[2]).lower()#test_5
+#net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 
 #### Plots
