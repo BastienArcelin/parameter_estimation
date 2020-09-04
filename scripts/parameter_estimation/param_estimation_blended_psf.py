@@ -52,7 +52,7 @@ list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir
 list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('.npy')]
 print(list_of_samples_test)
 
-training_generator = generator.BatchGenerator_random_coord(bands,
+training_generator = generator.BatchGenerator_random_coord_psf(bands,
                                     images_dir,
                                     list_of_samples, 
                                     total_sample_size=None,
@@ -62,7 +62,7 @@ training_generator = generator.BatchGenerator_random_coord(bands,
                                     denorm = False,
                                     list_of_weights_e=None)
 
-validation_generator = generator.BatchGenerator_random_coord(bands,
+validation_generator = generator.BatchGenerator_random_coord_psf(bands,
                                     images_dir,
                                     list_of_samples_val, 
                                     total_sample_size=None,
@@ -72,7 +72,7 @@ validation_generator = generator.BatchGenerator_random_coord(bands,
                                     denorm = False,
                                     list_of_weights_e=None)
 
-test_generator = generator.BatchGenerator_random_coord(bands, 
+test_generator = generator.BatchGenerator_random_coord_psf(bands, 
                                     images_dir,
                                     list_of_samples_test, 
                                     total_sample_size=None,
@@ -149,7 +149,7 @@ if model_choice == 'full_prob_flipout':
 net.summary()
 
 #### Loss definition
-alpha = K.variable(1.)
+alpha = K.variable(0.)
 
 if model_choice == 'full_prob_rt' or model_choice == 'full_prob_flipout':
     kl = sum(net.losses)
@@ -170,19 +170,19 @@ else:
 def kl_metric(y_true, y_pred):
     return K.sum(net.losses)
 
-net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4), 
+net.compile(optimizer=tf.optimizers.Adam(learning_rate=5e-4), 
               loss=negative_log_likelihood , metrics = ['mse', 'acc', kl_metric], experimental_run_tf_function=False)
 
 
 # if str(sys.argv[3]).lower() == 'true':
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/loss/'#test_coord_2/loss/  # test_coord_1/loss/
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/loss/'#test_coord_2/loss/  # test_coord_1/loss/
 print(loading_path)
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1'
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
@@ -194,7 +194,7 @@ callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, alpha_chan
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
-hist = net.fit(training_ds, epochs=130,
+hist = net.fit(training_ds, epochs=30,
                     steps_per_epoch=steps_per_epoch,
                     verbose=1,
                     shuffle=True,
@@ -214,7 +214,7 @@ hist = net.fit(training_ds, epochs=130,
 #           workers=0,
 #           use_multiprocessing = True)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/'
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 
@@ -222,7 +222,7 @@ net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 # training
 
 ## REGENERER AVEC NOUVELLES IMAGES ET RENORMALISATION CORRECTE
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_4/loss/'#test_5
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/loss/'#test_5
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 test = test_generator.__getitem__(2)
