@@ -67,3 +67,19 @@ class changelr(Callback):
             if self.epoch == 200:
                 K.set_value(self.vae.optimizer.lr, 10-5)
         self.epoch +=1
+
+
+# # Create a callback to monitor training
+# class wandb_cb(Callback):
+#     def __init__(self,vae):
+#         self.epoch = 0
+#         self.vae = vae
+    
+#     def on_epoch_end(self, alpha, vae):
+#         wandb.log({"Epoch": epoch,        
+#            "Train Loss": loss_train,        
+#            "Train Acc": acc_train,        
+#            "Valid Loss": loss_valid,        
+#            "Valid Acc": acc_valid})
+#         self.epoch +=1
+
