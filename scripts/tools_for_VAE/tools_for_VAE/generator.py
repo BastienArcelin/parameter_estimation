@@ -455,7 +455,7 @@ class BatchGenerator_random_coord_psf(tensorflow.keras.utils.Sequence):
         data = pd.read_csv(sample_filename.replace('images.npy','data.csv'))
         shifts = np.load(self.path+self.trainval_or_test+'/shifts/'+sample_filename[-38:].replace('images.npy','shifts.npy'))
 
-        data = data.replace(to_replace = 10.,value = 0)
+        #data = data.replace(to_replace = 10.,value = 0)
         #print(data)
         new_data = data[(np.abs(data['e1_fit_0'])<=1.) &#e1_0
                         (np.abs(data['e2_fit_0'])<=1.) &#e2_0
@@ -477,7 +477,7 @@ class BatchGenerator_random_coord_psf(tensorflow.keras.utils.Sequence):
 
         y = np.zeros((self.batch_size, 2))
 
-        x_1 = sample[indices,1][:,self.bands]
+        x_1 = sample[indices,-1][:,self.bands]
 
         x_2 = np.zeros((self.batch_size,64,64,6))
 
@@ -493,37 +493,6 @@ class BatchGenerator_random_coord_psf(tensorflow.keras.utils.Sequence):
             y[i,0] = np.array(new_data['e1_fit_'+str(z-1)][indices[i]])
             y[i,1] = np.array(new_data['e2_fit_'+str(z-1)][indices[i]])
             #y[i,2] = np.log(np.array(new_data['redshift_'+str(z-1)][indices[i]]))
-
-            # if new_data['nb_blended_gal'][indices[i]]==1:
-            #     #psf_img_lsst = PSF_lsst.drawImage(nx=img_size, ny=img_size, scale=pixel_scale_lsst)
-                
-            #     psf = PSF_lsst.shift((shifts[indices,0][i,0],shifts[indices,0][i,1]))
-            #     temp_img = galsim.ImageF(img_size, img_size, scale=pixel_scale_lsst)
-            #     psf.drawImage( image=temp_img)#filters['r'],
-            #     for m in range(6):
-            #         x_2[i,:,:,m]=temp_img.array.data
-            #     #x_center = np.around(shifts[indices,0][i,0]/0.2).astype(int)
-            #     #print(x_center)
-            #     #y_center = np.around(shifts[indices,0][i,1]/0.2).astype(int)
-
-            #     y[i,0] = np.array(new_data['e1_0'][indices[i]])#(np.array(new_data['e1_0'][indices[i]])-mu_e1)/std_e1#np.exp(np.array(new_data['e1_0'][indices[i]]))*2
-            #     y[i,1] = np.array(new_data['e2_0'][indices[i]])#(np.array(new_data['e2_0'][indices[i]])-mu_e2)/std_e2#np.exp(np.array(new_data['e2_0'][indices[i]]))*2
-            #     y[i,2] = np.log(np.array(new_data['redshift_0'][indices[i]]))#(np.log(np.array(new_data['redshift_0'][indices[i]]))-mu_z)/std_z
-            # else:
-            #     #psf_img_lsst = PSF_lsst.drawImage(nx=img_size, ny=img_size, scale=pixel_scale_lsst)
-                
-            #     psf = PSF_lsst.shift((shifts[indices,1][i,0],shifts[indices,1][i,1]))
-            #     temp_img = galsim.ImageF(img_size, img_size, scale=pixel_scale_lsst)
-            #     psf.drawImage( image=temp_img)#filters['r'],
-            #     for m in range(6):
-            #         x_2[i,:,:,m]=temp_img.array.data
-            #     #x_center = np.around(shifts[indices,1][i,0]/0.2).astype(int)
-            #     #print(x_center)
-            #     #y_center = np.around(shifts[indices,1][i,1]/0.2).astype(int)
-
-            #     y[i,0] = np.array(new_data['e1_1'][indices[i]])#(np.array(new_data['e1_1'][indices[i]])-mu_e1)/std_e1#np.exp(np.array(new_data['e1_0'][indices[i]]))*2
-            #     y[i,1] = np.array(new_data['e2_1'][indices[i]])#(np.array(new_data['e2_1'][indices[i]])-mu_e2)/std_e2#np.exp(np.array(new_data['e2_0'][indices[i]]))*2
-            #     y[i,2] = np.log(np.array(new_data['redshift_1'][indices[i]]))#(np.log(np.array(new_data['redshift_1'][indices[i]]))-mu_z)/std_z
         
         # Preprocessing of the data to be easier for the network to learn
         if self.do_norm:

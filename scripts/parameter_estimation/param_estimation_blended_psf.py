@@ -98,7 +98,7 @@ bands = [4,5,6,7,8,9]#
 
 # With generator
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
-images_dir = '/pbs/home/b/barcelin/sps_link/data/psf_change/'
+images_dir = '/pbs/home/b/barcelin/sps_link/data/psf_change/10_test/'
 
 list_of_samples = [[x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('.npy')][0]]#training
 list_of_samples_val = [[x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('.npy')][0]]#validation
@@ -305,14 +305,14 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4),
 
 
 
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/loss/'#test_coord_2/loss/  # test_coord_1/loss/
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_2/loss/'#test_coord_2/loss/  # test_coord_1/loss/
 print(loading_path)
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_2'
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
@@ -324,7 +324,7 @@ callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, WandbCallb
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
-hist = net.fit(training_ds, epochs=50,
+hist = net.fit(training_ds, epochs=100,
                     steps_per_epoch=steps_per_epoch,
                     verbose=1,
                     shuffle=True,
@@ -344,7 +344,7 @@ print(validation_steps)
 #           validation_steps=validation_steps,
 #           callbacks= callbacks)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_2/'
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 
@@ -352,7 +352,7 @@ net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 # training
 
 ## REGENERER AVEC NOUVELLES IMAGES ET RENORMALISATION CORRECTE
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/loss/'#test_5
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_2/loss/'#test_5
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 test = test_generator.__getitem__(2)
