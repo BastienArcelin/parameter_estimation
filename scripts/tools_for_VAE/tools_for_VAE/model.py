@@ -88,10 +88,10 @@ def get_posterior_fn():
   return tfp_layers_util.default_mean_field_normal_fn(
       loc_initializer=tf1.initializers.he_normal(), 
       untransformed_scale_initializer=tf1.initializers.random_normal(
-          mean=-9.0, stddev=0.1)
+          mean=-15, stddev=0.1)#mean=-9, stddev=0.1)
       )
 # kernel divergence weight in loss
-kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p) / (512*32))
+kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p) / (10000))
 
 def create_model_full_prob_rt(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
 
@@ -182,8 +182,7 @@ def create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernel
 
         h = tf.keras.layers.concatenate([h, h_2], axis =-1)
         #h = tf.keras.layers.multiply([h,h_2]) #
-        #h = tf.keras.layers.dot(inputs = [h,h_2], axes=(1,2), normalize = False)
-        #h = BatchNormalization()(h)
+
     h = Flatten()(h)
     h = PReLU()(h)
 
@@ -193,72 +192,6 @@ def create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernel
     model = Model([input_layer_1, input_layer_2],h)
 
     return model
-
-
-def create_model_wo_ls_peak_2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    input_layer_1 = Input(shape=(input_shape)) 
-    input_layer_2 = Input(shape=(input_shape)) 
-    # Encoding part
-    #h = tf.keras.layers.concatenate([input_layer_1, tf.keras.layers.multiply([input_layer_1, input_layer_2])], axis=-1)#input_layer_1+input_layer_2#tf.keras.layers.multiply([input_layer_1, input_layer_2])#
-    h = BatchNormalization()(h)
-    h_2 = input_layer_2#BatchNormalization()(input_layer_2)
-    for i in range(len(filters)):
-        h_2 = tf.keras.layers.concatenate([Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2), h_2], axis =-1)
-        h_2 = PReLU()(h_2)
-        h_2 = tf.keras.layers.concatenate([Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2), h_2], axis =-1)
-        h_2 = PReLU()(h_2)
-
-        h = tf.keras.layers.concatenate([h, Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)], axis =-1)
-        h = PReLU()(h)
-        h = tf.keras.layers.concatenate([h, Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)], axis =-1)
-        h = PReLU()(h)
-
-        h = tf.keras.layers.concatenate([h, h_2], axis =-1)
-        #h = h+h_2
-    #h = h + tf.keras.layers.multiply([h, h_2])
-    h = Flatten()(h)
-
-    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-                activation=None)(h)
-    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
-
-    model = Model([input_layer_1, input_layer_2],h)
-
-    return model
-
-
-def create_model_wo_ls_peak_3(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    input_layer_1 = Input(shape=(input_shape)) 
-    input_layer_2 = Input(shape=(input_shape)) 
-    # Encoding part
-    #h = tf.keras.layers.concatenate([input_layer_1, tf.keras.layers.multiply([input_layer_1, input_layer_2])], axis=-1)#input_layer_1+input_layer_2#tf.keras.layers.multiply([input_layer_1, input_layer_2])#
-    h = BatchNormalization()(h)
-    h_2 = input_layer_2#BatchNormalization()(input_layer_2)
-    for i in range(len(filters)):
-        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
-        h_2 = PReLU()(h_2)
-        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)+h_2
-        h_2 = PReLU()(h_2)
-
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
-        h = PReLU()(h)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)+h
-        h = PReLU()(h)
-
-        h = tf.keras.layers.concatenate([h, h_2], axis =-1)
-        #h = h+h_2
-    #h = h + tf.keras.layers.multiply([h, h_2])
-    h = Flatten()(h)
-
-    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-                activation=None)(h)
-    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
-
-    model = Model([input_layer_1, input_layer_2],h)
-
-    return model
-
-
 
 
 def create_model_wo_ls_peak_siamese(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):

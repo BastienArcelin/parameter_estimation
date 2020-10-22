@@ -28,14 +28,14 @@ class changeAlpha(Callback):
         #self.path = path
         #self.epochs = epochs
     def on_epoch_end(self, alpha, network):
-        stable = 0
-        new_alpha = 0.1
+        stable = 9
+        #new_alpha = 0.3
         if self.epoch > stable and K.get_value(self.alpha)<1 :
             #if (self.alpha < 1):
                 #new_alpha =1
             #else:
             print('Changing loss')
-            new_alpha = K.get_value(self.alpha)+0.005
+            new_alpha = K.get_value(self.alpha)+0.05
             if new_alpha > 1:
                 new_alpha = 1
             print(new_alpha, self.epoch)

@@ -6,24 +6,20 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import collections
-from importlib import reload
 import galsim
 
 import tensorflow
 import tensorflow as tf
 import tensorflow_probability as tfp
-from tensorflow.keras.layers import Input, Dense, Lambda, Layer, Add, Multiply, Reshape, Flatten, BatchNormalization
-from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.layers import Conv2D, Input, Dense, Dropout, MaxPool2D, Flatten,  Reshape, UpSampling2D, Cropping2D, Conv2DTranspose, PReLU, Concatenate, Lambda, BatchNormalization, concatenate, LeakyReLU
-
+import tensorflow.keras as keras
+from tensorflow.keras import backend as K
 tfd = tfp.distributions
 
 sys.path.insert(0,'../../scripts/tools_for_VAE/')
 import tools_for_VAE.layers as layers
 from tools_for_VAE import utils, vae_functions, generator, model
 from tools_for_VAE.callbacks import changeAlpha
-import tensorflow.keras as keras
-from tensorflow.keras import backend as K
+
 
 import wandb
 from wandb.keras import WandbCallback
@@ -46,54 +42,6 @@ steps_per_epoch = int(10000/batch_size)
 validation_steps = int(2000/batch_size)
 
 bands = [4,5,6,7,8,9]#
-#bands = [6]
-
-# ######### FOR PSF GENERATION 
-
-
-# fwhm_lsst = 0.65 ## Fixed at median value : Fig 1 : https://arxiv.org/pdf/0805.2366.pdf
-
-# PSF_lsst = galsim.Kolmogorov(fwhm=fwhm_lsst)
-# pixel_scale_lsst = 0.2
-# img_size = 64
-# #################### FILTERS ###################
-# filters = {}
-# euclid_filters_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../data/EUCLID_Filters/')
-# lsst_filters_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../data/share_galsim/bandpasses')
-
-# # read in the Euclid NIR filters
-# filter_names_euclid_nir = 'HJY'
-# filter_names_euclid_vis = 'V'
-
-# for filter_name in filter_names_euclid_nir:
-#     filter_filename = os.path.join(euclid_filters_dir, 'Euclid_NISP0.{0}.dat'.format(filter_name))
-#     filters[filter_name] = galsim.Bandpass(filter_filename, wave_type='Angstrom')
-#     filters[filter_name] = filters[filter_name].thin(rel_err=1e-4)
-
-# filter_filename = os.path.join(euclid_filters_dir, 'Euclid_VIS.dat')
-# filters['V'] = galsim.Bandpass(filter_filename, wave_type='Angstrom')
-# filters['V'] = filters[filter_name].thin(rel_err=1e-4)
-
-# # read in the LSST filters
-# filter_names_lsst = 'ugrizy'
-# for filter_name in filter_names_lsst:
-#     filter_filename = os.path.join(lsst_filters_dir, 'LSST_{0}.dat'.format(filter_name))
-#     filters[filter_name] = galsim.Bandpass(filter_filename, wave_type='nm')
-#     filters[filter_name] = filters[filter_name].thin(rel_err=1e-4)
-
-# filter_names_all = 'HJYVugrizy'
-
-
-# ####################
-
-
-
-
-
-
-
-
-
 
 
 # With generator
@@ -251,20 +199,8 @@ test_ds = tf.data.Dataset.from_generator(test_batch_generator,
 
 print('construction OK')
 
-
-
-
-# ### Define number of steps
-# steps_per_epoch = int(nb_train/batch_size)
-# validation_steps = int(nb_val/batch_size)
-# print(validation_steps, nb_val, batch_size)
-
-#print('construction OK: '+str((iter(test_ds))))
 #### Model definition
-model_choice = 'wo_ls'
-# With latent space
-if model_choice == 'ls':
-    net = model.create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+model_choice = 'full_prob_flipout'
 # Without latent space
 if model_choice == 'wo_ls':
     net = model.create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
@@ -298,33 +234,33 @@ else:
 def kl_metric(y_true, y_pred):
     return K.sum(net.losses)
 
-net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4), 
+net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-3), 
               loss=negative_log_likelihood , 
               metrics = ['mse', 'acc', kl_metric],
               experimental_run_tf_function=False)
 
 
 
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/loss/'#test_coord_2/loss/  # test_coord_1/loss/
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_4/loss/'#test_coord_2/loss/  # test_coord_1/loss/
 print(loading_path)
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_4/'
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
 
 alpha_changer = changeAlpha(alpha, net,negative_log_likelihood, kl_metric)
 
-callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, WandbCallback()]#, alpha_changer]
+callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, alpha_changer]#, WandbCallback()]#, alpha_changer]
 
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
-hist = net.fit(training_ds, epochs=10,
+hist = net.fit(training_ds, epochs=150,
                     steps_per_epoch=steps_per_epoch,
                     verbose=1,
                     shuffle=True,
@@ -344,7 +280,7 @@ print(validation_steps)
 #           validation_steps=validation_steps,
 #           callbacks= callbacks)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_4/'
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 
@@ -352,7 +288,7 @@ net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 # training
 
 ## REGENERER AVEC NOUVELLES IMAGES ET RENORMALISATION CORRECTE
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_1/loss/'#test_5
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_coord_psf_4/loss/'#test_5
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 test = test_generator.__getitem__(2)
