@@ -2,50 +2,18 @@
 import sys
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
 import pandas as pd
-import seaborn as sns
-import collections
-from importlib import reload
+import warnings
+import healpy as hp
+from astropy.table import Table
 
 sys.path.insert(0,'../scripts/tools_for_VAE/')
 from tools_for_VAE import cutout_img_dc2
 
-from astropy.coordinates import SkyCoord
 import FoFCatalogMatching
 import GCRCatalogs
-import fitsio
-
-import lsst.afw.geom as afw_geom
-import lsst.afw.table as afw_table
-import lsst.daf.persistence as dp
-import GCRCatalogs
 import lsst.geom
-
-from astropy.io import fits
-import warnings
-import healpy as hp
-from collections import namedtuple
-from astropy.table import Table
-
-import os
-import numpy as np
-
-from astropy.table import Table
-
 import lsst.daf.persistence as dafPersist
-import lsst.afw.geom as afwGeom
-import lsst.afw.coord as afwCoord
-import lsst.afw.image as afwImage
-import lsst.afw.display as afwDisplay
-import lsst.geom
-
-from astropy.visualization import ZScaleInterval
-
-import matplotlib.pyplot as plt
-plt.rcParams['figure.figsize'] = (6, 6)
-zscale = ZScaleInterval()
 
 print('loading librairies OK')
 # Read in the observed galaxy catalog data.
@@ -62,12 +30,11 @@ print('load catalogs OK')
 # Let's define a magnitude cut
 mag_filters = [
     (np.isfinite, 'mag_r'),
-    'mag_r < 26.5',
-]
+    'mag_r < 26.5']
 
 # Load ra and dec from object, using both of the filters we just defined.
 object_data = gc_obs.get_quantities(['ra', 'dec'],
-                                        filters=(mag_filters), native_filters=['tract == 4855'])
+                filters=(mag_filters), native_filters=['tract == 4855'])
 
 # Match the corresponding area for the truth catalog
 max_ra = np.nanmax(object_data['ra'])
@@ -132,7 +99,7 @@ butler_u = dafPersist.Butler(repo_u)
 # Create the numpy arrays
 import time
 t_3 = time.time()
-N = 20
+N = 1000
 
 img_sample = np.zeros((N,59,59,6))
 psf_sample = np.zeros((N,59,59,6))
@@ -143,13 +110,15 @@ shear1=[]
 shear2=[]
 redshift=[]
 
-for i in range (N):
+indices = np.random.choice(list(range(len([truth_idx]))), size=N, replace=False)
+
+print('beginning of for loop')
+for z, i in enumerate (indices):
     print(i)
+    
     first = id_ra_dec[object_idx[i]]
     ra, dec = first['ra'], first['dec']
-    frame = 0
-    plt.figure(frame)
-    
+
     img = np.zeros((59,59,6))
     psf = np.zeros((59,59,6))
     filters = ['u','g','r','i','z','y']
@@ -157,7 +126,11 @@ for i in range (N):
         if k == 0:
             cutout = cutout_img_dc2.cutout_coadd_ra_dec(butler_u, ra, dec, filter=filter_k)
         else:
-            cutout = cutout_img_dc2.cutout_coadd_ra_dec(butler, ra, dec, filter=filter_k)
+            cutout = cutout_img_dc2.cutout_coadd_ra_dec(butler_grizy, ra, dec, filter=filter_k)
+        
+        radec = lsst.geom.SpherePoint(ra, dec, lsst.geom.degrees)
+        xy = cutout.getWcs().skyToPixel(radec)  # returns a Point2D
+        
         img[:,:,k]= cutout.image.array
         psf[:,:,k]= cutout.getPsf().computeKernelImage(xy).array
     
@@ -177,11 +150,11 @@ print(t_4-t_3)
 df = pd.DataFrame()
 df['e1']=np.array(e1)
 df['e2']=np.array(e2)
-df['shear_1']=np.array(shear_1)
-df['shear_2']=np.array(shear_2)
+df['shear_1']=np.array(shear1)
+df['shear_2']=np.array(shear2)
 df['redshift']=np.array(redshift)
 
 # Save the arrays
 np.save('/sps/lsst/users/barcelin/data/dc2_test/img_sample.npy', img_sample)
 np.save('/sps/lsst/users/barcelin/data/dc2_test/psf_sample.npy', psf_sample)
-df.to_csv('/sps/lsst/users/barcelin/data/dc2_test/img_data.csv', df)
+df.to_csv('/sps/lsst/users/barcelin/data/dc2_test/img_data.csv', index=False)
