@@ -1,3 +1,4 @@
+print('OK OK OK OK OK OK debut du fichier python')
 #### Import librairies
 import sys
 import os
@@ -99,7 +100,7 @@ butler_u = dafPersist.Butler(repo_u)
 # Create the numpy arrays
 import time
 t_3 = time.time()
-N = 1000
+N = 10
 
 img_sample = np.zeros((N,59,59,6))
 psf_sample = np.zeros((N,59,59,6))
@@ -110,7 +111,7 @@ shear1=[]
 shear2=[]
 redshift=[]
 
-indices = np.random.choice(list(range(len([truth_idx]))), size=N, replace=False)
+indices = np.random.choice(list(range(len(truth_idx))), size=N, replace=False)
 
 print('beginning of for loop')
 for z, i in enumerate (indices):
@@ -132,10 +133,14 @@ for z, i in enumerate (indices):
         xy = cutout.getWcs().skyToPixel(radec)  # returns a Point2D
         
         img[:,:,k]= cutout.image.array
-        psf[:,:,k]= cutout.getPsf().computeKernelImage(xy).array
+        if cutout.getPsf().computeKernelImage(xy).array.size != (59,59):
+            print('not taken into account')
+            break
+        else:
+            psf[:,:,k]= cutout.getPsf().computeKernelImage(xy).array
     
-    img_sample[i]=img
-    psf_sample[i]=psf
+    img_sample[z]=img
+    psf_sample[z]=psf
     
     e1.append(truth_data['ellipticity_1_true'][truth_idx[i]])
     e2.append(truth_data['ellipticity_2_true'][truth_idx[i]])
