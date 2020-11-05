@@ -1,7 +1,7 @@
-print('OK OK OK OK OK OK debut du fichier python')
 #### Import librairies
 import sys
 import os
+import time
 import numpy as np
 import pandas as pd
 import warnings
@@ -16,7 +16,6 @@ import GCRCatalogs
 import lsst.geom
 import lsst.daf.persistence as dafPersist
 
-print('loading librairies OK')
 tract = str(sys.argv[1]) # test: 4855 # training: 5074 # validation: 4637
 training_test_val = str(sys.argv[2]) # test, training, validation
 N = int(sys.argv[3]) # Usually 10 000 images per file
@@ -31,15 +30,16 @@ with warnings.catch_warnings():
     warnings.filterwarnings('ignore')
     gc = GCRCatalogs.load_catalog('cosmoDC2_v1.1.4_image')
 
-print('load catalogs OK')
 # Let's define a magnitude cut
 mag_filters = [
     (np.isfinite, 'mag_r'),
-    'mag_r < 26.5']
+    'mag_r < 24.5']
 
 # Load ra and dec from object, using both of the filters we just defined.
-object_data = gc_obs.get_quantities(['ra', 'dec', 'blendedness'],
-                filters=(mag_filters), native_filters=['tract == '+str(tract)]) # test: 4855 # training: 5074 # validation: 4637
+object_data = gc_obs.get_quantities(['ra', 'dec', 'blendedness', 'snr_r_cModel',
+                                    'ext_shapeHSM_HsmShapeRegauss_e1','ext_shapeHSM_HsmShapeRegauss_e2',
+                                    'mag_r_cModel'],
+                filters=(mag_filters), native_filters=['tract == '+str(tract)]) # test: 4855 # training: 4438 #5074 # validation: 4637
 
 # Match the corresponding area for the truth catalog
 max_ra = np.nanmax(object_data['ra'])
@@ -55,17 +55,18 @@ for ipx in ipix:
 pos_filters=[f'ra >= {min_ra}',f'ra <={max_ra}', f'dec >= {min_dec}', f'dec <= {max_dec}']
 
 # Define a mag cut for truth catalog 
-truth_mag_filters = ['mag_r < 26.5']
+truth_mag_filters = ['mag_r < 24.5']
 
 # Load wanted quantities from truth catalog (https://github.com/LSSTDESC/gcr-catalogs/blob/master/GCRCatalogs/SCHEMA.md)
 quantities = ['galaxy_id', 'ra', 'dec', 
               'redshift', 'redshift_true',
-              'ellipticity_1_true', 'ellipticity_2_true', 
+              'mag_r_lsst',
+              'ellipticity_1_true', 'ellipticity_2_true',
+              'convergence',
               'shear_1', 'shear_2']
 truth_data = gc.get_quantities(quantities, filters=truth_mag_filters+pos_filters, 
                                       native_filters=native_filter)
 
-print('load quantities OK')
 # FoFCatalogMatching.match takes a dictionary of catalogs to match, a friends-of-friends linking length. 
 # Because our "catalog" is not an astropy table or pandas dataframe, 
 # `len(truth_coord)` won't give the actual length of the table
@@ -76,7 +77,6 @@ results = FoFCatalogMatching.match(
     catalog_len_getter=lambda x: len(x['ra']),
 )
 
-print('matching catalogs OK')
 ## Create a list of (ra,dec) of the wanted galaxies
 # first we need to know which rows are from the truth catalog and which are from the object
 truth_mask = results['catalog_key'] == 'truth'
@@ -102,7 +102,6 @@ butler_grizy = dafPersist.Butler(repo_grizy)
 butler_u = dafPersist.Butler(repo_u)
 
 # Create the numpy arrays
-import time
 t_3 = time.time()
 
 img_sample = np.zeros((N,59,59,6))
@@ -110,12 +109,18 @@ psf_sample = np.zeros((N,59,59,6))
 
 e1 = []
 e2 = []
+hsm_e1 = []
+hsm_e2 = []
 shear1=[]
 shear2=[]
 redshift=[]
 idx = []
 blend = []
 redshift_true=[]
+convergence=[]
+snr = []
+mag_r_meas = []
+mag_r_true = []
 
 indices = np.random.choice(list(range(len(truth_idx))), size=N, replace=False)
 
@@ -150,11 +155,17 @@ for z, i in enumerate (indices):
     idx.append(truth_data['galaxy_id'][truth_idx[i]])
     e1.append(truth_data['ellipticity_1_true'][truth_idx[i]])
     e2.append(truth_data['ellipticity_2_true'][truth_idx[i]])
+    hsm_e1.append(object_data['ext_shapeHSM_HsmShapeRegauss_e1'][object_idx[i]])
+    hsm_e2.append(object_data['ext_shapeHSM_HsmShapeRegauss_e2'][object_idx[i]])
     shear1.append(truth_data['shear_1'][truth_idx[i]])
     shear2.append(truth_data['shear_2'][truth_idx[i]])
     redshift.append(truth_data['redshift'][truth_idx[i]])
     blend.append(object_data['blendedness'][object_idx[i]])
+    snr.append(object_data['snr_r_cModel'][object_idx[i]])
     redshift_true.append(truth_data['redshift_true'][truth_idx[i]])
+    convergence.append(truth_data['convergence'][truth_idx[i]])
+    mag_r_meas.append(object_data['mag_r_cModel'][object_idx[i]])
+    mag_r_true.append(truth_data['mag_r_lsst'][truth_idx[i]])
     
 t_4 = time.time()
 
@@ -168,9 +179,15 @@ df['shear_1']=np.array(shear1) # True shear applied
 df['shear_2']=np.array(shear2) # True shear applied
 df['redshift']=np.array(redshift) # Cosmological redshift with line-of-sight motion
 df['redshift_true']=np.array(redshift_true) # Cosmological redshift
-df['blendedness']=np.array(blend) 
+df['blendedness']=np.array(blend)
+df['snr_r']=np.array(snr)
+df['convergence']=np.array(convergence)
+df['e1_hsm_regauss']=np.array(hsm_e1)
+df['e2_hsm_regauss']=np.array(hsm_e2)
+df['mag_r_meas']=np.array(mag_r_meas)
+df['mag_r_true']=np.array(mag_r_true)
 
 # Save the arrays
-np.save('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/img_sample_5.npy', img_sample)
-np.save('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/psf_sample_5.npy', psf_sample)
-df.to_csv('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/img_data_5.csv', index=False)
+np.save('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/img_sample.npy', img_sample)
+np.save('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/psf_sample.npy', psf_sample)
+df.to_csv('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/img_data.csv', index=False)
