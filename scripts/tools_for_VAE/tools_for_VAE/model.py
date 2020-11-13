@@ -23,7 +23,7 @@ tfd = tfp.distributions
 sys.path.insert(0,'../../scripts/tools_for_VAE/')
 from tools_for_VAE import ktied_distribution
 
-def create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+def create_model_old(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     tfd = tfp.distributions
     prior = tfd.Independent(tfd.Normal(loc=tf.zeros(latent_dim), scale=1),
                             reinterpreted_batch_ndims=1)
@@ -197,6 +197,70 @@ def create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernel
         h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h_2)
         h_2 = PReLU()(h_2)
     
+    #h = tf.keras.layers.Lambda(lambda x: tf.signal.fft2d(tf.cast(x, tf.complex64), name=None))(h)
+    #h_2 = tf.keras.layers.Lambda(lambda x: tf.signal.fft2d(tf.cast(x, tf.complex64), name=None))(h_2)
+
+        h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
+        #h = tf.keras.layers.SeparableConv2D(filters[i], (1,1), activation=None, padding='valid',  data_format='channels_last')(h)
+        #h = tf.keras.layers.multiply([h,h_2]) #
+
+    h = Flatten()(h)
+    h = PReLU()(h)
+    
+    #h = Dense(64)(h)
+    #h = PReLU()(h)
+    #h = tf.keras.layers.Lambda(lambda x: tf.signal.ifft(tf.cast(x, tf.complex64), name=None))(h)
+    
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(tf.cast(h,tf.float64))
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h) #Dense(2)(h)#
+    #activity_regularizer=tfp.layers.KLDivergenceRegularizer(prior, weight=0.2))(h)
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+# Model with coordinate of target galaxy
+def create_model_wo_ls_peak_3(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+
+    h = BatchNormalization()(input_layer_1)
+    h_2 = input_layer_2
+    for i in range(len(filters)):
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+    h = Flatten()(h)
+    h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(tf.cast(h,tf.float64))
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+# Model with coordinate of target galaxy
+def create_model_wo_ls_peak_2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    tfd = tfp.distributions
+
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+
+    h = BatchNormalization()(input_layer_1)
+    h_2 = input_layer_2
+    for i in range(len(filters)):
+        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
+        h_2 = PReLU()(h_2)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h_2)
+        h_2 = PReLU()(h_2)
+    
     h = tf.keras.layers.Lambda(lambda x: tf.signal.fft2d(tf.cast(x, tf.complex64), name=None))(h)
     h_2 = tf.keras.layers.Lambda(lambda x: tf.signal.fft2d(tf.cast(x, tf.complex64), name=None))(h_2)
 
@@ -206,17 +270,18 @@ def create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernel
 
     h = Flatten()(h)
     h = PReLU()(h)
-    #h = Dense(512)(h)
+    
+    h = Dense(64)(h)
+    h = PReLU()(h)
+    h = tf.keras.layers.Lambda(lambda x: tf.signal.ifft(tf.cast(x, tf.complex64), name=None))(h)
+    
     h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-                activation=None)(h)
+                activation=None)(tf.cast(h,tf.float64))
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h) #Dense(2)(h)#
     #activity_regularizer=tfp.layers.KLDivergenceRegularizer(prior, weight=0.2))(h)
     model = Model([input_layer_1, input_layer_2],h)
 
     return model
-
-
-
 
 # Model with coordinate of target galaxy
 def create_model_wo_ls_inception(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
@@ -228,30 +293,33 @@ def create_model_wo_ls_inception(input_shape, latent_dim, hidden_dim, filters, k
     h_2 = input_layer_2
 
     for i in range(len(filters)):
-        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
-        h_2 = PReLU()(h_2)
-        h_2_1 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h_2)
-        h_2_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2_1)
-        h_2_2 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h_2)
-        h_2_2 = Conv2D(filters[i], (5,5), activation=None, padding='same')(h_2_2)
-        h_2_3 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h_2)
-        h_2 =tf.keras.layers.concatenate([h_2_1, h_2_2,h_2_3], axis =-1)
-        h_2 = PReLU()(h_2)
+        #h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
+        #h_2 = PReLU()(h_2)
+        #h_2_1 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h_2)
+        #h_2_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2_1)
+        #h_2_2 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h_2)
+        #h_2_2 = Conv2D(filters[i], (5,5), activation=None, padding='same')(h_2_2)
+        #h_2_3 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h_2)
+        #h_2 =tf.keras.layers.concatenate([h_2_1, h_2_2,h_2_3], axis =-1)
+        #h_2 = PReLU()(h_2)
+
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
 
         h_1 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h)
         h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_1)
         h_1_1 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h)
         h_1_1 = Conv2D(filters[i], (5,5), activation=None, padding='same')(h_1_1)
         h_1_2 = Conv2D(filters[i], (1,1), activation=None, padding='same')(h)
-        h =tf.keras.layers.concatenate([h_1, h_1_1,h_1_2], axis =-1)
-        h = PReLU()(h)
+        h_11 =tf.keras.layers.concatenate([h_1, h_1_1,h_1_2], axis =-1)
+        #h = h_11+h
+        h = PReLU()(h_11)
 
         h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h)
         h = PReLU()(h)
-        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h_2)
-        h_2 = PReLU()(h_2)
+        #h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h_2)
+        #h_2 = PReLU()(h_2)
 
-    h = tf.keras.layers.concatenate([h, h_2], axis =-1)
+    #h = tf.keras.layers.concatenate([h, h_2], axis =-1)
 
     h = Flatten()(h)
     h = PReLU()(h)
@@ -265,6 +333,92 @@ def create_model_wo_ls_inception(input_shape, latent_dim, hidden_dim, filters, k
     return model
 
 
+def create_model_wo_ls_resnet(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+
+    h = BatchNormalization()(input_layer_1)
+    h_2 = input_layer_2
+    for i in range(len(filters)):
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+        h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h_1 = PReLU()(h_1)
+        h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_1)
+        h_1 = PReLU()(h_1)
+        h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_1)+h
+        h = PReLU()(h_1)
+    h = tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=None, padding='valid')(h)
+    h = Flatten()(h)
+    h = PReLU()(h)
+    h = Dense(16)(h)
+    h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(tf.cast(h,tf.float64))
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+
+
+def create_model_wo_ls_densenet(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+
+    h = BatchNormalization()(input_layer_1)
+    h_2 = input_layer_2
+    for i in range(len(filters)):
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+        h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h_2 =tf.keras.layers.concatenate([h, h_1], axis =-1)
+        h_2 = PReLU()(h_2)
+        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
+        h_3 = tf.keras.layers.concatenate([h, h_1, h_2], axis =-1)
+        h_3 = PReLU()(h_3)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h_3)
+        h = PReLU()(h)
+    h = Flatten()(h)
+    h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(tf.cast(h,tf.float64))
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+def create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+
+    h = input_layer_1
+    h_2 = input_layer_2
+
+    l_2 = Conv2D(6, (3,3), activation=None, padding='same')
+    h_2 = l_2(h_2)
+        
+    for i in range(len(filters)):
+        if i == 0:
+            h = l_2(h)
+            h = PReLU()(h)
+            h = BatchNormalization()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+
+    h = Flatten()(h)
+    h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+                activation=None)(tf.cast(h,tf.float64))
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
 
 
 def create_model_wo_ls_peak_siamese(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):

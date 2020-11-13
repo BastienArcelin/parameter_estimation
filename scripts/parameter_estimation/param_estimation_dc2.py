@@ -38,7 +38,7 @@ kernels = [3,3,3,3]#[3,3,3,3]##,3]
 conv_activation = None
 dense_activation = None
 
-steps_per_epoch = int(100000/batch_size)
+steps_per_epoch = int(40000/batch_size)
 validation_steps = int(10000/batch_size)
 
 bands = [0,1,2,3,4,5]
@@ -47,7 +47,7 @@ bands = [0,1,2,3,4,5]
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
 images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'
 
-list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_mag_24.5')) if x.endswith('img_sample.npy')]
+list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_mag_24.5')) if x.endswith('img_sample.npy')][:4]
 list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_mag_24.5')) if x.endswith('img_sample.npy')]
 list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test_mag_24.5')) if x.endswith('img_sample.npy')]
 
@@ -135,7 +135,7 @@ print('construction OK')
 model_choice = 'wo_ls'
 # Without latent space
 if model_choice == 'wo_ls':
-    net = model.create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
+    net = model.create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
 # Full probabilistic model with reparametrization trick
 if model_choice == 'full_prob_rt':
     net = model.create_model_prob_rt_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
@@ -174,14 +174,14 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4),
 
 
 
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/'#test_coord_2/loss/  # test_coord_1/loss/
-print(loading_path)
-latest = tf.train.latest_checkpoint(loading_path)
-net.load_weights(latest)
+#loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5/mse/'#/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/
+#print(loading_path)
+#latest = tf.train.latest_checkpoint(loading_path)
+#net.load_weights(latest)
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5'
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
@@ -193,7 +193,7 @@ callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, alpha_chan
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
-hist = net.fit(training_ds, epochs=10,
+hist = net.fit(training_ds, epochs=100,
                     steps_per_epoch=steps_per_epoch,
                     verbose=1,
                     shuffle=True,
@@ -201,7 +201,7 @@ hist = net.fit(training_ds, epochs=10,
                     validation_data=validation_ds,
                     validation_steps=validation_steps)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5'
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 
@@ -209,7 +209,7 @@ net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 # training
 
 ## REGENERER AVEC NOUVELLES IMAGES ET RENORMALISATION CORRECTE
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/loss/'#test_5
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5/loss/'#test_5
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 test = test_generator.__getitem__(3)
@@ -218,6 +218,8 @@ training_data = test[0]#[0], test[0][1]]
 training_labels = test[1]
 #print(training_data.shape)
 out = net([tf.cast(training_data[0], tf.float32), tf.cast(training_data[1], tf.float32)])# net(training_data) en TF2
+
+print('mean e2: '+str(np.mean(K.get_value(out.mean())[:,0]))+' mean e2: '+str(np.mean(K.get_value(out.mean())[:,1])))
 
 fig = plt.figure()
 sns.distplot(K.get_value(out.mean())[:,0], bins = 20)# out.mean().numpy()
@@ -240,17 +242,17 @@ fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 nb_of_points = 100
 axes[0].errorbar(training_labels[:nb_of_points,0], K.get_value(out.mean())[:nb_of_points,0], yerr = 2*K.get_value(out.stddev())[:nb_of_points,0],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
-x = np.linspace(-4,4)#-0,5
+x = np.linspace(-1,1)#-0,5
 axes[0].plot(x, x)
 axes[0].legend()
-axes[0].set_ylim(-4,4)#-1,1
+axes[0].set_ylim(-1,1)#-1,1
 axes[0].set_title('$e1$')
 
 axes[1].errorbar(training_labels[:nb_of_points,1], K.get_value(out.mean())[:nb_of_points,1], yerr = 2*K.get_value(out.stddev())[:nb_of_points,1],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
-x = np.linspace(-4,4)#-1,1
+x = np.linspace(-1,1)#-1,1
 axes[1].plot(x, x)
 axes[1].legend()
-axes[1].set_ylim(-4,4)#-1,1
+axes[1].set_ylim(-1,1)#-1,1
 axes[1].set_title('$e2$')
 
 # axes[2].errorbar(training_labels[:nb_of_points,2], K.get_value(out.mean())[:nb_of_points,2], yerr = 2*K.get_value(out.stddev())[:nb_of_points,2],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')

@@ -374,6 +374,7 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
 
         new_data = data[(np.abs(data['e1'])<=1.) &
                         (np.abs(data['e2'])<=1.)]# &
+                        #(np.abs(data['blendedness'])==0.)]# &
                         #(data['snr_r']>25)]
 
             
@@ -410,18 +411,20 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
 
         ellipticity_1_test = calc_lensed_ellipticity_1(ell_1_test, ell_2_test, shear_1_test, shear_2_test, convergence_test)
         ellipticity_2_test = calc_lensed_ellipticity_2(ell_1_test, ell_2_test, shear_1_test, shear_2_test, convergence_test)
-        quantile_transformer_1 = preprocessing.QuantileTransformer(output_distribution='normal',random_state=0) 
-        quantile_transformer_1 = quantile_transformer_1.fit(ellipticity_conversion(ellipticity_1_test).reshape(-1, 1))
-        quantile_transformer_2 = preprocessing.QuantileTransformer(output_distribution='normal',random_state=0) 
-        quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_conversion(ellipticity_1_test).reshape(-1, 1))
+        quantile_transformer_1 = preprocessing.QuantileTransformer(random_state=0) #output_distribution='normal',
+        #quantile_transformer_1 = quantile_transformer_1.fit(ellipticity_conversion(ellipticity_1_test).reshape(-1, 1))
+        quantile_transformer_1 = quantile_transformer_1.fit(ellipticity_1_test.reshape(-1, 1))
+        quantile_transformer_2 = preprocessing.QuantileTransformer(random_state=0) #output_distribution='normal',
+        #quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_conversion(ellipticity_2_test).reshape(-1, 1))
+        quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_2_test.reshape(-1, 1))
 
         ################
 
         # y = np.zeros((self.batch_size, 2))
         # X_1 = np.zeros((self.batch_size, 59,59,6))
         # X_2 = np.zeros((self.batch_size, 59,59,6))
-        #  #  flip : flipping the image array
-        # rand = np.random.randint(4)
+        # # # flip : flipping the image array
+        # # rand = np.random.randint(4)
         # for k in range (4):
         #     if k == 1: 
         #         X_1[0:int(self.batch_size/4)] = np.flip(x_1[0:int(self.batch_size/4)], axis=2)
@@ -432,7 +435,7 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         #         X_1[1*int(self.batch_size/4):2*int(self.batch_size/4)] = np.swapaxes(x_1[0:int(self.batch_size/4)], 2, 1)
         #         X_2[1*int(self.batch_size/4):2*int(self.batch_size/4)] = np.swapaxes(x_2[0:int(self.batch_size/4)], 2, 1)
         #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),0] = +ellipticity_conversion(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),1] = ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
+        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),1] = +ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
         #     elif k == 3:
         #         X_1[2*int(self.batch_size/4):3*int(self.batch_size/4)] = np.swapaxes(np.flip(x_1[0:int(self.batch_size/4)], axis=2), 2, 1)
         #         X_2[2*int(self.batch_size/4):3*int(self.batch_size/4)] = np.swapaxes(np.flip(x_2[0:int(self.batch_size/4)], axis=2), 2, 1)
@@ -442,34 +445,51 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         #         X_1[3*int(self.batch_size/4):4*int(self.batch_size/4)] = x_1[0:int(self.batch_size/4)]
         #         X_2[3*int(self.batch_size/4):4*int(self.batch_size/4)] = x_2[0:int(self.batch_size/4)]
         #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),0] = -ellipticity_conversion(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),1] = ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
-        #quantile_transformer = preprocessing.QuantileTransformer(output_distribution='normal',random_state=0) # without 'output_distribution='normal',' if want just uniform distrib
-        #X_train_trans = quantile_transformer.fit_transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))
-        #quantile_transformer_2 = preprocessing.QuantileTransformer(output_distribution='normal',random_state=0) # without 'output_distribution='normal',' if want just uniform distrib
-        #X_train_trans_2 = quantile_transformer_2.fit_transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))
+        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),1] = +ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
+        # x_1 = X_1
+        # x_2 = X_2
+        # y[:,0]=quantile_transformer_1.transform(y[:,0].reshape(-1, 1))[:,0]
+        # y[:,1]=quantile_transformer_2.transform(y[:,1].reshape(-1, 1))[:,0]
 
 
         y = np.zeros((self.batch_size, 2))
          #  flip : flipping the image array
         rand = np.random.randint(4)
+        
         if rand == 1: 
             x_1 = np.flip(x_1, axis=2)
             x_2 = np.flip(x_2, axis=2)
-            y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0] # sign changed
-            y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0] # sign changed
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0] # sign changed
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
+            y[:,0] = -ellipticity_1 # sign changed
+            y[:,1] = -ellipticity_2
         elif rand == 2:
             x_1 = np.swapaxes(x_1, 2, 1)
             x_2 = np.swapaxes(x_2, 2, 1)
-            y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
-            y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = +quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]            
+            y[:,0] = +ellipticity_1
+            y[:,1] = ellipticity_2
         elif rand == 3:
             x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
             x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
-            y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
-            y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = +quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
+            y[:,0] = +ellipticity_1
+            y[:,1] = -ellipticity_2
         else:
-            y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
-            y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
+            y[:,0] = -ellipticity_1
+            y[:,1] = ellipticity_2
 
 
         if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
