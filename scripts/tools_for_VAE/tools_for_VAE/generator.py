@@ -299,6 +299,13 @@ def calc_lensed_ellipticity_2(es1, es2, gamma1, gamma2, kappa):
     e = (es + g) / (1.0 + g.conjugate()*es) # lensed ellipticity
     return np.imag(e)
 
+def calc_lensed_ellipticity(es1, es2, gamma1, gamma2, kappa):
+    gamma = gamma1 + gamma2*1j # shear (as a complex number)
+    es =   es1 + es2*1j # intrinsic ellipticity (as a complex number)
+    g = gamma / (1.0 - kappa) # reduced shear
+    e = (es + g) / (1.0 + g.conjugate()*es) # lensed ellipticity
+    return np.absolute(e)
+
 
 class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
     """
@@ -396,13 +403,17 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         shear_1 = np.array(new_data['shear_1'][indices])
         shear_2 = np.array(new_data['shear_2'][indices])
         convergence = np.array(new_data['convergence'][indices])
+        
+        ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
 
-        ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
-        ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
-        ellipticity_conversion = lambda e: 2*e / (1.0+e*e)
+        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
+        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
+        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
         
         ############
-        data_gen = pd.read_csv('/sps/lsst/users/barcelin/data/dc2_test/training_mag_24.5/1_img_data.csv')
+        data_gen = pd.read_csv('/sps/lsst/users/barcelin/data/dc2_test/training_2/1_img_data.csv')
         ell_1_test = np.array(data_gen['e1'])
         ell_2_test = np.array(data_gen['e2'])
         shear_1_test = np.array(data_gen['shear_1'])
@@ -411,10 +422,10 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
 
         ellipticity_1_test = calc_lensed_ellipticity_1(ell_1_test, ell_2_test, shear_1_test, shear_2_test, convergence_test)
         ellipticity_2_test = calc_lensed_ellipticity_2(ell_1_test, ell_2_test, shear_1_test, shear_2_test, convergence_test)
-        quantile_transformer_1 = preprocessing.QuantileTransformer(random_state=0) #output_distribution='normal',
+        quantile_transformer_1 = preprocessing.QuantileTransformer(output_distribution='normal', random_state=0) #
         #quantile_transformer_1 = quantile_transformer_1.fit(ellipticity_conversion(ellipticity_1_test).reshape(-1, 1))
         quantile_transformer_1 = quantile_transformer_1.fit(ellipticity_1_test.reshape(-1, 1))
-        quantile_transformer_2 = preprocessing.QuantileTransformer(random_state=0) #output_distribution='normal',
+        quantile_transformer_2 = preprocessing.QuantileTransformer(output_distribution='normal', random_state=0) #output_distribution='normal',
         #quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_conversion(ellipticity_2_test).reshape(-1, 1))
         quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_2_test.reshape(-1, 1))
 
@@ -429,33 +440,46 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         #     if k == 1: 
         #         X_1[0:int(self.batch_size/4)] = np.flip(x_1[0:int(self.batch_size/4)], axis=2)
         #         X_2[0:int(self.batch_size/4)] = np.flip(x_2[0:int(self.batch_size/4)], axis=2)
-        #         y[0:int(self.batch_size/4),0] = -ellipticity_conversion(ellipticity_1[0:int(self.batch_size/4)]) # sign changed
-        #         y[0:int(self.batch_size/4),1] = -ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
+        #         y[0:int(self.batch_size/4),0] = +(ellipticity_1[0:int(self.batch_size/4)]) 
+        #         y[0:int(self.batch_size/4),1] = -(ellipticity_2[0:int(self.batch_size/4)])
         #     elif k == 2:
         #         X_1[1*int(self.batch_size/4):2*int(self.batch_size/4)] = np.swapaxes(x_1[0:int(self.batch_size/4)], 2, 1)
         #         X_2[1*int(self.batch_size/4):2*int(self.batch_size/4)] = np.swapaxes(x_2[0:int(self.batch_size/4)], 2, 1)
-        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),0] = +ellipticity_conversion(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),1] = +ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
+        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),0] = -(ellipticity_1[0:int(self.batch_size/4)])
+        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),1] = +(ellipticity_2[0:int(self.batch_size/4)])
         #     elif k == 3:
         #         X_1[2*int(self.batch_size/4):3*int(self.batch_size/4)] = np.swapaxes(np.flip(x_1[0:int(self.batch_size/4)], axis=2), 2, 1)
         #         X_2[2*int(self.batch_size/4):3*int(self.batch_size/4)] = np.swapaxes(np.flip(x_2[0:int(self.batch_size/4)], axis=2), 2, 1)
-        #         y[2*int(self.batch_size/4):3*int(self.batch_size/4),0] = +ellipticity_conversion(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[2*int(self.batch_size/4):3*int(self.batch_size/4),1] = -ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
+        #         y[2*int(self.batch_size/4):3*int(self.batch_size/4),0] = -(ellipticity_1[0:int(self.batch_size/4)])
+        #         y[2*int(self.batch_size/4):3*int(self.batch_size/4),1] = -(ellipticity_2[0:int(self.batch_size/4)])
         #     else:
         #         X_1[3*int(self.batch_size/4):4*int(self.batch_size/4)] = x_1[0:int(self.batch_size/4)]
         #         X_2[3*int(self.batch_size/4):4*int(self.batch_size/4)] = x_2[0:int(self.batch_size/4)]
-        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),0] = -ellipticity_conversion(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),1] = +ellipticity_conversion(ellipticity_2[0:int(self.batch_size/4)])
+        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),0] = +(ellipticity_1[0:int(self.batch_size/4)])
+        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),1] = +(ellipticity_2[0:int(self.batch_size/4)])
         # x_1 = X_1
         # x_2 = X_2
-        # y[:,0]=quantile_transformer_1.transform(y[:,0].reshape(-1, 1))[:,0]
-        # y[:,1]=quantile_transformer_2.transform(y[:,1].reshape(-1, 1))[:,0]
 
 
         y = np.zeros((self.batch_size, 2))
-         #  flip : flipping the image array
+        #flip : flipping the image array
         rand = np.random.randint(4)
         
+        # ####### Test of normalization
+        # I = [3.4725035028144715, 
+        # 4.712976415619254,
+        # 7.635940959954262,
+        # 11.900790692928434,
+        # 13.827042811599373,
+        # 13.843257184934616]
+        # beta = 20
+
+        # bands = [0,1,2,3,4,5]
+        # #for i in range (len(x_1)):
+        # for ib, b in enumerate(bands):
+        #     x_1[:,:,:,b] = np.tanh(np.arcsinh(x_1[:,:,:,b]/(I[b]/beta)))
+        # ########
+
         if rand == 1: 
             x_1 = np.flip(x_1, axis=2)
             x_2 = np.flip(x_2, axis=2)

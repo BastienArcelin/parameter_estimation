@@ -26,7 +26,7 @@ from wandb.keras import WandbCallback
 #wandb.init()
 ######## Parameters
 nb_of_bands = 6#1
-batch_size = 128
+batch_size = 256
 
 input_shape = (59, 59, nb_of_bands)
 hidden_dim = 256
@@ -38,7 +38,7 @@ kernels = [3,3,3,3]#[3,3,3,3]##,3]
 conv_activation = None
 dense_activation = None
 
-steps_per_epoch = int(40000/batch_size)
+steps_per_epoch = int(80000/batch_size)
 validation_steps = int(10000/batch_size)
 
 bands = [0,1,2,3,4,5]
@@ -47,9 +47,9 @@ bands = [0,1,2,3,4,5]
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
 images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'
 
-list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_mag_24.5')) if x.endswith('img_sample.npy')][:4]
-list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_mag_24.5')) if x.endswith('img_sample.npy')]
-list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test_mag_24.5')) if x.endswith('img_sample.npy')]
+list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_mag_24.5')) if x.endswith('img_sample.npy')]#mag_24.5
+list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_mag_24.5')) if x.endswith('img_sample.npy')]#mag_24.5
+list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test_mag_24.5')) if x.endswith('img_sample.npy')]#mag_24.5
 
 print(list_of_samples)
 print(list_of_samples_val)
@@ -135,7 +135,7 @@ print('construction OK')
 model_choice = 'wo_ls'
 # Without latent space
 if model_choice == 'wo_ls':
-    net = model.create_model(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
+    net = model.create_model_wo_ls_peak_3(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
 # Full probabilistic model with reparametrization trick
 if model_choice == 'full_prob_rt':
     net = model.create_model_prob_rt_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
@@ -159,7 +159,23 @@ if model_choice == 'full_prob_rt' or model_choice == 'full_prob_flipout':
     negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)+ kl *(K.get_value(alpha)-1)
 
 else:
-    negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)
+    #@tf.function
+    def mean_pred(y_true, y_pred):
+        mse = tf.keras.losses.MeanSquaredError()
+        mae = tf.keras.losses.MeanAbsoluteError()
+        msle = tf.keras.losses.MeanSquaredLogarithmicError()
+        r = int(batch_size/4)
+        return (msle(4*y_true[:r,0], y_pred.mean()[:r,0]-y_pred.mean()[r:2*r,0]-y_pred.mean()[2*r:3*r,0]+y_pred.mean()[3*r:4*r,0]) + 
+        msle(4*y_true[:r,1], -y_pred.mean()[:r,1]+y_pred.mean()[r:2*r,1]-y_pred.mean()[2*r:3*r,1]+y_pred.mean()[3*r:4*r,1])) #+ 
+        # mae(y_pred.mean()[:r,0], -y_pred.mean()[r:2*r,0]) + mae(-y_pred.mean()[2*r:3*r,0],y_pred.mean()[3*r:4*r,0]) +
+        # mae(y_pred.mean()[:r,0], -y_pred.mean()[2*r:3*r,0]) + mae(-y_pred.mean()[2*r:3*r,0],-y_pred.mean()[1*r:2*r,0])+
+        # mae(y_pred.mean()[:r,0], y_pred.mean()[3*r:4*r,0]) + mae(-y_pred.mean()[1*r:2*r,0],y_pred.mean()[3*r:4*r,0]) + 
+        # mae(y_pred.mean()[:r,1], -y_pred.mean()[r:2*r,1]) + mae(-y_pred.mean()[2*r:3*r,1],y_pred.mean()[3*r:4*r,1]) +
+        # mae(y_pred.mean()[:r,1], -y_pred.mean()[2*r:3*r,1]) + mae(-y_pred.mean()[2*r:3*r,1],-y_pred.mean()[1*r:2*r,1])+
+        # mae(y_pred.mean()[:r,1], y_pred.mean()[3*r:4*r,1]) + mae(-y_pred.mean()[1*r:2*r,1],y_pred.mean()[3*r:4*r,1])) #+
+        #K.abs(K.sum(y_pred.mean()[:,0])) + K.abs(K.sum(y_pred.mean()[:,1])))
+
+    negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)# + 1.*mean_pred(x,rv_x)
 
 
 # Custom metrics
@@ -174,21 +190,21 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4),
 
 
 
-#loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5/mse/'#/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/
-#print(loading_path)
-#latest = tf.train.latest_checkpoint(loading_path)
-#net.load_weights(latest)
+# loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/'#/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/
+# print(loading_path)
+# latest = tf.train.latest_checkpoint(loading_path)
+# net.load_weights(latest)
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v1'
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
 
 alpha_changer = changeAlpha(alpha, net,negative_log_likelihood, kl_metric)
 
-callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, alpha_changer]#, WandbCallback()]#, alpha_changer]
+callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, alpha_changer]#, alpha_changer]#, WandbCallback()]#, alpha_changer]
 
 
 ######## Train the network
@@ -201,15 +217,12 @@ hist = net.fit(training_ds, epochs=100,
                     validation_data=validation_ds,
                     validation_steps=validation_steps)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v1'
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
-
 #### Plots
-# training
-
 ## REGENERER AVEC NOUVELLES IMAGES ET RENORMALISATION CORRECTE
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v5/loss/'#test_5
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v1/mse/'#test_5
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 test = test_generator.__getitem__(3)

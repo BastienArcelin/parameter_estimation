@@ -231,10 +231,15 @@ def create_model_wo_ls_peak_3(input_shape, latent_dim, hidden_dim, filters, kern
         h = PReLU()(h)
         h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h)
         h = PReLU()(h)
+        h = Dropout(0.25)(h)
     h = Flatten()(h)
     h = PReLU()(h)
-    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-                activation=None)(tf.cast(h,tf.float64))
+    h_1 = Dense(2, activation='tanh')(h)
+    h_2 = Dense(3, activation = None)(h)
+    h_2 = PReLU()(h_2)
+    h = tf.keras.layers.concatenate([h_1,h_2])
+    #h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
+    #            activation=None)(h)#(tf.cast(h,tf.float64))
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
 
     model = Model([input_layer_1, input_layer_2],h)
