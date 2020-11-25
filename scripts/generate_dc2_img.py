@@ -33,7 +33,7 @@ with warnings.catch_warnings():
 # Let's define a magnitude cut
 mag_filters = [
     (np.isfinite, 'mag_r'),
-    'mag_r < 24.5']
+    'mag_r < 26.5']
 
 # Load ra and dec from object, using both of the filters we just defined.
 object_data = gc_obs.get_quantities(['ra', 'dec', 'blendedness', 'snr_r_cModel',
@@ -55,7 +55,7 @@ for ipx in ipix:
 pos_filters=[f'ra >= {min_ra}',f'ra <={max_ra}', f'dec >= {min_dec}', f'dec <= {max_dec}']
 
 # Define a mag cut for truth catalog 
-truth_mag_filters = ['mag_r < 24.5']
+truth_mag_filters = ['mag_r < 26.5']
 
 # Load wanted quantities from truth catalog (https://github.com/LSSTDESC/gcr-catalogs/blob/master/GCRCatalogs/SCHEMA.md)
 quantities = ['galaxy_id', 'ra', 'dec', 
@@ -179,13 +179,13 @@ df['shear_1']=np.array(shear1) # True shear applied
 df['shear_2']=np.array(shear2) # True shear applied
 df['redshift']=np.array(redshift) # Cosmological redshift with line-of-sight motion
 df['redshift_true']=np.array(redshift_true) # Cosmological redshift
-df['blendedness']=np.array(blend)
-df['snr_r']=np.array(snr)
-df['convergence']=np.array(convergence)
-df['e1_hsm_regauss']=np.array(hsm_e1)
-df['e2_hsm_regauss']=np.array(hsm_e2)
-df['mag_r_meas']=np.array(mag_r_meas)
-df['mag_r_true']=np.array(mag_r_true)
+df['blendedness']=np.array(blend) # blendedness
+df['snr_r']=np.array(snr) # Signal to noise ratio in r-band
+df['convergence']=np.array(convergence) # Shear convergence
+df['e1_hsm_regauss']=np.array(hsm_e1) # e1 parameter measured with HSM REGAUSS method
+df['e2_hsm_regauss']=np.array(hsm_e2) # e2 parameter measured with HSM REGAUSS method
+df['mag_r_meas']=np.array(mag_r_meas) # Magnitude measured on image by LSST pipeline
+df['mag_r_true']=np.array(mag_r_true) # Magnitude in input of simulation
 
 # Save the arrays
 np.save('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/img_sample.npy', img_sample)

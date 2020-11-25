@@ -28,7 +28,7 @@ class changeAlpha(Callback):
         #self.path = path
         #self.epochs = epochs
     def on_epoch_end(self, alpha, network):
-        stable = 9
+        stable = 1
         #new_alpha = 0.3
         if self.epoch > stable and K.get_value(self.alpha)<1 :
             #if (self.alpha < 1):
