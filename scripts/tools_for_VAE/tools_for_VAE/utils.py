@@ -26,8 +26,8 @@ def listdir_fullpath(d):
     return [os.path.join(d, f) for f in os.listdir(d)]
 
 ############# Normalize data ############# 
-def norm(x, bands,n_years, channel_last=False, inplace=True):
-    I = np.concatenate([I_euclid,n_years*I_lsst])
+def norm(x, bands,test_dir, channel_last=False, inplace=True):
+    I = np.load(test_dir+'galaxies_blended_20191024_0_I_norm.npy', mmap_mode = 'c')
     if not inplace:
         y = np.copy(x)
     else:
@@ -44,8 +44,8 @@ def norm(x, bands,n_years, channel_last=False, inplace=True):
                 y[i,ib] = np.tanh(np.arcsinh(y[i,ib]/(I[b]/beta)))
     return y
 
-def denorm(x, bands,n_years, channel_last=False, inplace=True):
-    I = np.concatenate([I_euclid,n_years*I_lsst])
+def denorm(x, bands,test_dir, channel_last=False, inplace=True):
+    I = np.load(test_dir+'galaxies_blended_20191024_0_I_norm.npy', mmap_mode = 'c')
     if not inplace:
         y = np.copy(x)
     else:
