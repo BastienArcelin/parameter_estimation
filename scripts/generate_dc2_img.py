@@ -9,16 +9,16 @@ import healpy as hp
 from astropy.table import Table
 
 sys.path.insert(0,'../scripts/tools_for_VAE/')
-from tools_for_VAE import cutout_img_dc2
+from tools_for_VAE import cutout_img_dc2, utils
 
 import FoFCatalogMatching
 import GCRCatalogs
 import lsst.geom
 import lsst.daf.persistence as dafPersist
 
-tract = str(sys.argv[1]) # test: 4855 # training: 5074 # validation: 4637
-training_test_val = str(sys.argv[2]) # test, training, validation
-N = int(sys.argv[3]) # Usually 10 000 images per file
+tract = '4855'# str(sys.argv[1]) # test: 4855 # training: 5074 # validation: 4637
+training_test_val = 'test_mag_26.5'#str(sys.argv[2]) # test, training, validation
+N = 1000#int(sys.argv[3]) # Usually 10 000 images per file
 
 # Read in the observed galaxy catalog data.
 with warnings.catch_warnings():
@@ -107,25 +107,26 @@ t_3 = time.time()
 img_sample = np.zeros((N,59,59,6))
 psf_sample = np.zeros((N,59,59,6))
 
-e1 = []
-e2 = []
-hsm_e1 = []
-hsm_e2 = []
-shear1=[]
-shear2=[]
-redshift=[]
-idx = []
-blend = []
-redshift_true=[]
-convergence=[]
-snr = []
-mag_r_meas = []
-mag_r_true = []
 
 indices = np.random.choice(list(range(len(truth_idx))), size=N, replace=False)
 
-print('beginning of for loop')
-for z, i in enumerate (indices):
+def gen_function(indices):
+    np.random.seed() # important for multiprocessing !
+    e1 = []
+    e2 = []
+    hsm_e1 = []
+    hsm_e2 = []
+    shear1=[]
+    shear2=[]
+    redshift=[]
+    idx = []
+    blend = []
+    redshift_true=[]
+    convergence=[]
+    snr = []
+    mag_r_meas = []
+    mag_r_true = []
+    i = np.random.choice(indices)
     print(i)
     first = id_ra_dec[object_idx[i]]
     ra, dec = first['ra'], first['dec']
@@ -148,10 +149,7 @@ for z, i in enumerate (indices):
             break
         else:
             psf[:,:,k]= cutout.getPsf().computeKernelImage(xy).array
-    
-    img_sample[z]=img
-    psf_sample[z]=psf
-    
+        
     idx.append(truth_data['galaxy_id'][truth_idx[i]])
     e1.append(truth_data['ellipticity_1_true'][truth_idx[i]])
     e2.append(truth_data['ellipticity_2_true'][truth_idx[i]])
@@ -167,27 +165,69 @@ for z, i in enumerate (indices):
     mag_r_meas.append(object_data['mag_r_cModel'][object_idx[i]])
     mag_r_true.append(truth_data['mag_r_lsst'][truth_idx[i]])
     
-t_4 = time.time()
+    return img, psf, idx, e1, e2, hsm_e1, hsm_e2, shear1, shear2, redshift, blend, snr, convergence, redshift_true, mag_r_meas, mag_r_true
+img_sample = []
+psf_sample = []
 
+# Here we save data for all datasets
+res = utils.apply_ntimes(gen_function, N, ([indices]))
+
+e1 = []
+e2 = []
+hsm_e1 = []
+hsm_e2 = []
+shear1=[]
+shear2=[]
+redshift=[]
+idx = []
+blend = []
+redshift_true=[]
+convergence=[]
+snr = []
+mag_r_meas = []
+mag_r_true = []
+for i in range (N):
+    img_temp, psf_temp, idx_temp, e1_temp, e2_temp, hsm_e1_temp, hsm_e2_temp, shear1_temp, shear2_temp, redshift_temp, blend_temp, snr_temp, convergence_temp,redshift_true_temp, mag_r_meas_temp, mag_r_true_temp = res[i]
+    idx.append(idx_temp)
+    e1.append(e1_temp)
+    e2.append(e2_temp)
+    hsm_e1.append(hsm_e1_temp)
+    hsm_e2.append(hsm_e2_temp)
+    shear1.append(shear1_temp)
+    shear2.append(shear2_temp)
+    redshift.append(redshift_temp)
+    redshift_true.append(redshift_true_temp)
+    blend.append(blend_temp)
+    convergence.append(convergence_temp)
+    snr.append(snr_temp)
+    mag_r_meas.append(mag_r_meas_temp)
+    mag_r_true.append(mag_r_true_temp)
+    img_sample.append(img_temp)
+    psf_sample.append(psf_temp)
+
+
+t_4 = time.time()
+print(np.array(idx).shape)
 print(t_4-t_3)
 
 df = pd.DataFrame()
-df['id']=np.array(idx) # Galaxy index in truth catalog
-df['e1']=np.array(e1) # True ellipticity before lensing
-df['e2']=np.array(e2) # True ellipticity before lensing
-df['shear_1']=np.array(shear1) # True shear applied
-df['shear_2']=np.array(shear2) # True shear applied
-df['redshift']=np.array(redshift) # Cosmological redshift with line-of-sight motion
-df['redshift_true']=np.array(redshift_true) # Cosmological redshift
-df['blendedness']=np.array(blend) # blendedness
-df['snr_r']=np.array(snr) # Signal to noise ratio in r-band
-df['convergence']=np.array(convergence) # Shear convergence
-df['e1_hsm_regauss']=np.array(hsm_e1) # e1 parameter measured with HSM REGAUSS method
-df['e2_hsm_regauss']=np.array(hsm_e2) # e2 parameter measured with HSM REGAUSS method
-df['mag_r_meas']=np.array(mag_r_meas) # Magnitude measured on image by LSST pipeline
-df['mag_r_true']=np.array(mag_r_true) # Magnitude in input of simulation
+df['id']=np.array(idx)[:,0] # Galaxy index in truth catalog
+df['e1']=np.array(e1)[:,0] # True ellipticity before lensing
+df['e2']=np.array(e2)[:,0] # True ellipticity before lensing
+df['shear_1']=np.array(shear1)[:,0] # True shear applied
+df['shear_2']=np.array(shear2)[:,0] # True shear applied
+df['redshift']=np.array(redshift)[:,0] # Cosmological redshift with line-of-sight motion
+df['redshift_true']=np.array(redshift_true)[:,0] # Cosmological redshift
+df['blendedness']=np.array(blend)[:,0] # blendedness
+df['snr_r']=np.array(snr)[:,0] # Signal to noise ratio in r-band
+df['convergence']=np.array(convergence)[:,0] # Shear convergence
+df['e1_hsm_regauss']=np.array(hsm_e1)[:,0] # e1 parameter measured with HSM REGAUSS method
+df['e2_hsm_regauss']=np.array(hsm_e2)[:,0] # e2 parameter measured with HSM REGAUSS method
+df['mag_r_meas']=np.array(mag_r_meas)[:,0] # Magnitude measured on image by LSST pipeline
+df['mag_r_true']=np.array(mag_r_true)[:,0] # Magnitude in input of simulation
 
 # Save the arrays
-np.save('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/img_sample.npy', img_sample)
-np.save('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/psf_sample.npy', psf_sample)
-df.to_csv('/sps/lsst/users/barcelin/data/dc2_test/'+str(training_test_val)+'/img_data.csv', index=False)
+data_dir = str(os.environ.get('IMGEN_DC2_DATA'))
+np.save(data_dir+str(training_test_val)+'/img_sample.npy', img_sample)
+np.save(data_dir+str(training_test_val)+'/psf_sample.npy', psf_sample)
+df.to_csv(data_dir+str(training_test_val)+'/img_data.csv', index=False)

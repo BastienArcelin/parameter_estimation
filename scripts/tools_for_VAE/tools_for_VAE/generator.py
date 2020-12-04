@@ -380,9 +380,10 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         psf = np.load(sample_filename.replace('img_sample.npy','psf_sample.npy'), mmap_mode = 'c')
 
         new_data = data[(np.abs(data['e1'])<=1.) &
-                        (np.abs(data['e2'])<=1.)]# &
+                        (np.abs(data['e2'])<=1.) &
+                        (data['snr_r']<100)]#snr_r
                         #(np.abs(data['blendedness'])==0.)]# &
-                        #(data['snr_r']>25)]
+
 
             
         if self.list_of_weights_e == None:
@@ -394,8 +395,8 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         self.produced_samples += len(indices)
         
         #print(sample[indices[0]].shape)
-        x_1 = sample[indices]#,-1][:,self.bands]
-        x_2 = psf[indices]#,-1][:,self.bands]#np.zeros((self.batch_size,64,64,6))
+        x_1 = sample[indices][:,:,:,self.bands]#,-1][:,self.bands]
+        x_2 = psf[indices][:,:,:,self.bands]#,-1][:,self.bands]#np.zeros((self.batch_size,64,64,6))
         #print(x_1.shape)
         #print(x_2.shape)
         ell_1 = np.array(new_data['e1'][indices])
@@ -407,13 +408,13 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
         ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
 
-        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
-        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
-        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
-        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
+        #ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
+        #ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
         
         ############
-        data_gen = pd.read_csv('/sps/lsst/users/barcelin/data/dc2_test/training_2/1_img_data.csv')
+        data_gen = pd.read_csv('/sps/lsst/users/barcelin/data/dc2_test/training_mag_24.5/1_img_data.csv')
         ell_1_test = np.array(data_gen['e1'])
         ell_2_test = np.array(data_gen['e2'])
         shear_1_test = np.array(data_gen['shear_1'])
@@ -461,7 +462,7 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         # x_2 = X_2
 
 
-        y = np.zeros((self.batch_size, 2))
+        y = np.zeros((self.batch_size, 3))
         #flip : flipping the image array
         rand = np.random.randint(4)
         
@@ -485,37 +486,44 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
             x_2 = np.flip(x_2, axis=2)
             #y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0] # sign changed
             #y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
-            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0] # sign changed
-            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
-            y[:,0] = -ellipticity_1 # sign changed
-            y[:,1] = -ellipticity_2
+            y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0] # sign changed
+            y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
+            y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -ellipticity_1 # sign changed
+            #y[:,1] = -ellipticity_2
         elif rand == 2:
             x_1 = np.swapaxes(x_1, 2, 1)
             x_2 = np.swapaxes(x_2, 2, 1)
             #y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
             #y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
-            #y[:,0] = +quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
-            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]            
-            y[:,0] = +ellipticity_1
-            y[:,1] = ellipticity_2
+            y[:,0] = +quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
+            y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
+            y[:,2] = new_data['redshift'][indices]         
+            #y[:,0] = +ellipticity_1
+            #y[:,1] = ellipticity_2
         elif rand == 3:
             x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
             x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
             #y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
             #y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
-            #y[:,0] = +quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
-            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
-            y[:,0] = +ellipticity_1
-            y[:,1] = -ellipticity_2
+            y[:,0] = +quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
+            y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
+            y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = +ellipticity_1
+            #y[:,1] = -ellipticity_2
         else:
             #y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
             #y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
-            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
-            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
-            y[:,0] = -ellipticity_1
-            y[:,1] = ellipticity_2
+            y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]
+            y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]
+            y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -ellipticity_1
+            #y[:,1] = ellipticity_2
+        if len(self.bands)==1:
+            x_1 = np.expand_dims(x_1, axis=-1)
+            x_2 = np.expand_dims(x_2, axis=-1)
 
-
+        #x_1 = np.arcsinh(x_1/0.01)
         if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
             return (x_1, x_2), y
         elif self.trainval_or_test == 'test':
