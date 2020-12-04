@@ -31,7 +31,7 @@ batch_size = 256
 input_shape = (59, 59, nb_of_bands)
 hidden_dim = 256
 latent_dim = 32
-final_dim = 2
+final_dim = 3
 filters = [32,64,128,256]#[32,64,128,256]#[8,16,32,64]#[32,64,128,256]#,128]#[32,64,128,256,512]
 kernels = [3,3,3,3]#[3,3,3,3]##,3]
 
@@ -132,7 +132,7 @@ test_ds = tf.data.Dataset.from_generator(test_batch_generator,
 print('construction OK')
 
 #### Model definition
-model_choice = 'wo_ls'
+model_choice = 'wo_ls'#'full_prob_flipout'
 # Without latent space
 if model_choice == 'wo_ls':
     net = model.create_model_wo_ls_peak_3(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
@@ -141,7 +141,7 @@ if model_choice == 'full_prob_rt':
     net = model.create_model_prob_rt_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 # Full probabilistic model with flipout
 if model_choice == 'full_prob_flipout':
-    net = model.create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+    net = model.create_model_full_prob_flipout_dc2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 net.summary()
 
 #### Loss definition
@@ -183,21 +183,21 @@ def kl_metric(y_true, y_pred):
     return K.sum(net.losses)
 mse = tf.keras.losses.MeanSquaredError()
 
-net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4), 
+net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5), 
               loss=negative_log_likelihood,
               metrics = ['mse', 'acc', kl_metric],
               experimental_run_tf_function=False)
 
 
 
-# loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/'#/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/
-# print(loading_path)
-# latest = tf.train.latest_checkpoint(loading_path)
-# net.load_weights(latest)
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v11/loss/'#/sps/lsst/users/barcelin/TFP/weights/test_dc2/v2/mse/
+print(loading_path)
+latest = tf.train.latest_checkpoint(loading_path)
+net.load_weights(latest)
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v1'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v11'
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
@@ -209,7 +209,7 @@ callbacks = [checkpointer_mse, checkpointer_loss, checkpointer_acc]#, alpha_chan
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
-hist = net.fit(training_ds, epochs=100,
+hist = net.fit(training_ds, epochs=20,
                     steps_per_epoch=steps_per_epoch,
                     verbose=1,
                     shuffle=True,
@@ -217,12 +217,12 @@ hist = net.fit(training_ds, epochs=100,
                     validation_data=validation_ds,
                     validation_steps=validation_steps)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v1'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v11'
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 #### Plots
 ## REGENERER AVEC NOUVELLES IMAGES ET RENORMALISATION CORRECTE
-loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v1/mse/'#test_5
+loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v11/loss/'#test_5
 latest = tf.train.latest_checkpoint(loading_path)
 net.load_weights(latest)
 test = test_generator.__getitem__(3)
@@ -246,33 +246,33 @@ sns.distplot(training_labels[:,1], bins = 20)
 fig.savefig('full_prob/test_distrib_e2.png')
 
 
-# fig = plt.figure()
-# sns.distplot(K.get_value(out.mean())[:,2], bins = 20)# out.mean().numpy()
-# sns.distplot(training_labels[:,2], bins = 20)
-# fig.savefig('full_prob/test_distrib_e3.png')
+fig = plt.figure()
+sns.distplot(K.get_value(out.mean())[:,2], bins = 20)# out.mean().numpy()
+sns.distplot(training_labels[:,2], bins = 20)
+fig.savefig('full_prob/test_distrib_e3.png')
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 nb_of_points = 100
 axes[0].errorbar(training_labels[:nb_of_points,0], K.get_value(out.mean())[:nb_of_points,0], yerr = 2*K.get_value(out.stddev())[:nb_of_points,0],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
-x = np.linspace(-1,1)#-0,5
+x = np.linspace(-4,4)#(-1,1)#-0,5
 axes[0].plot(x, x)
 axes[0].legend()
-axes[0].set_ylim(-1,1)#-1,1
+axes[0].set_ylim(-4,4)#(-1,1)#-1,1
 axes[0].set_title('$e1$')
 
 axes[1].errorbar(training_labels[:nb_of_points,1], K.get_value(out.mean())[:nb_of_points,1], yerr = 2*K.get_value(out.stddev())[:nb_of_points,1],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
-x = np.linspace(-1,1)#-1,1
+x = np.linspace(-4,4)#(-1,1)#-1,1
 axes[1].plot(x, x)
 axes[1].legend()
-axes[1].set_ylim(-1,1)#-1,1
+axes[1].set_ylim(-4,4)#(-1,1)#-1,1
 axes[1].set_title('$e2$')
 
-# axes[2].errorbar(training_labels[:nb_of_points,2], K.get_value(out.mean())[:nb_of_points,2], yerr = 2*K.get_value(out.stddev())[:nb_of_points,2],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
-x = np.linspace(-3,4)
+axes[2].errorbar(training_labels[:nb_of_points,2], K.get_value(out.mean())[:nb_of_points,2], yerr = 2*K.get_value(out.stddev())[:nb_of_points,2],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
+x = np.linspace(-0.5,4)
 axes[2].plot(x, x)
 axes[2].legend()
-axes[2].set_ylim(-1.5,1.5)
+axes[2].set_ylim(-0.5,3.5)
 axes[2].set_title('$z$')
 
 fig.savefig('full_prob/test_train.png')

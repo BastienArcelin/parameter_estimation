@@ -223,6 +223,12 @@ def create_model_wo_ls_peak(input_shape, latent_dim, hidden_dim, filters, kernel
 def create_model_wo_ls_peak_3(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     input_layer_1 = Input(shape=(input_shape)) 
     input_layer_2 = Input(shape=(input_shape)) 
+    tfd = tfp.distributions
+    # Normal ditribution prior
+    prior = tfd.Independent(tfd.Normal(loc=tf.zeros(final_dim), scale=1),
+                        reinterpreted_batch_ndims=1)
+    prior2 = tfd.Independent(tfd.Normal(loc=tf.zeros(final_dim), scale=1),
+                        reinterpreted_batch_ndims=1)
 
     h = BatchNormalization()(input_layer_1)
     h_2 = input_layer_2
@@ -231,20 +237,60 @@ def create_model_wo_ls_peak_3(input_shape, latent_dim, hidden_dim, filters, kern
         h = PReLU()(h)
         h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h)
         h = PReLU()(h)
-        h = Dropout(0.25)(h)
+        #h = Dropout(0.25)(h)
     h = Flatten()(h)
+    #h = Dense(64, activation = 'tanh')(h)
+    #h = Dense(32)(h)
     h = PReLU()(h)
-    h_1 = Dense(2, activation='tanh')(h)
-    h_2 = Dense(3, activation = None)(h)
-    h_2 = PReLU()(h_2)
-    h = tf.keras.layers.concatenate([h_1,h_2])
-    #h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-    #            activation=None)(h)#(tf.cast(h,tf.float64))
-    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+    #h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(h)
+    #h = PReLU()(h)
+    #h = tfp.layers.MultivariateNormalTriL(final_dim,activity_regularizer=tfp.layers.KLDivergenceRegularizer(prior, weight=5.))(h)
+
+    #h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(h)
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)#,activity_regularizer=tfp.layers.KLDivergenceRegularizer(prior, weight=0.1))(h)
 
     model = Model([input_layer_1, input_layer_2],h)
 
     return model
+
+def create_model_full_prob_flipout_dc2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+    # Encoding part
+    h = BatchNormalization()(input_layer_1)
+    for i in range(len(filters)):
+        h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]),
+                                            kernel_posterior_fn=get_posterior_fn(),
+                                            #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                            kernel_divergence_fn=kernel_divergence_fn,
+                                            activation=conv_activation, 
+                                            padding='same')(h)
+        h = PReLU()(h)
+        h = tfp.layers.Convolution2DFlipout(filters[i], (kernels[i],kernels[i]),
+                                            kernel_posterior_fn=get_posterior_fn(), 
+                                            #kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                            kernel_divergence_fn=kernel_divergence_fn,
+                                            activation=conv_activation, 
+                                            padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+        #h = Dropout(0.25)(h)
+    h = Flatten()(h)
+    h = tfp.layers.DenseFlipout(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
+                                    kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                    kernel_divergence_fn = kernel_divergence_fn,
+                                    activation=None)(h)
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+
+    model = Model([input_layer_1, input_layer_2],h)
+    
+    return model
+
+
+
+
 
 # Model with coordinate of target galaxy
 def create_model_wo_ls_peak_2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
