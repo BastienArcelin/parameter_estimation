@@ -9,7 +9,7 @@ import tensorflow.keras
 import pandas as pd
 import scipy
 from scipy.stats import norm
-from sklearn import preprocessing
+#from sklearn import preprocessing
 
 from random import choice
 
@@ -18,6 +18,9 @@ from tools_for_VAE import utils
 import tensorflow as tf
 import galsim
 
+from skimage import restoration
+from astropy.convolution import Gaussian2DKernel
+from astropy.convolution import convolve
 ######### FOR PSF GENERATION 
 
 
@@ -223,24 +226,24 @@ class BatchGenerator_random_coord_psf(tensorflow.keras.utils.Sequence):
         Function which returns the input and target batches for the network
         """
         # If the generator is a training generator, the whole sample is displayed
-        #sample_filename = np.random.choice(self.list_of_samples, p=self.p)
-        #index = np.random.choice(1)
-        index = np.random.choice(list(range(len(self.p))), p=self.p)
-        sample_filename = self.list_of_samples[index]
+        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+        index = np.random.choice(1)
+        #index = np.random.choice(list(range(len(self.p))), p=self.p)
+        #sample_filename = self.list_of_samples[index]
         sample = np.load(sample_filename, mmap_mode = 'c')
         data = pd.read_csv(sample_filename.replace('images.npy','data.csv'))
         shifts = np.load(self.path+self.trainval_or_test+'/shifts/'+sample_filename[-38:].replace('images.npy','shifts.npy'))
 
         #data = data.replace(to_replace = 10.,value = 0)
         #print(data)
-        new_data = data[(np.abs(data['e1_fit_0'])<=1.) &#e1_0
-                        (np.abs(data['e2_fit_0'])<=1.) &#e2_0
-                        (np.abs(data['e1_fit_1'])<=1.) &#e1_1
-                        (np.abs(data['e2_fit_1'])<=1.) &#e2_1
-                        (np.abs(data['e1_fit_2'])<=1.) &#e1_2
-                        (np.abs(data['e2_fit_2'])<=1.) &#e2_2
-                        (np.abs(data['e1_fit_3'])<=1.) &#e1_3
-                        (np.abs(data['e2_fit_3'])<=1.) ]#e2_3
+        new_data = data[(np.abs(data['e1_0'])<=1.) &#e1_0
+                        (np.abs(data['e2_0'])<=1.) &#e2_0
+                        (np.abs(data['e1_1'])<=1.) &#e1_1
+                        (np.abs(data['e2_1'])<=1.) &#e2_1
+                        (np.abs(data['e1_2'])<=1.) &#e1_2
+                        (np.abs(data['e2_2'])<=1.) &#e2_2
+                        (np.abs(data['e1_3'])<=1.) &#e1_3
+                        (np.abs(data['e2_3'])<=1.) ]#e2_3
         #print(new_data['nb_blended_gal'])
 
         if self.list_of_weights_e == None:
@@ -253,21 +256,21 @@ class BatchGenerator_random_coord_psf(tensorflow.keras.utils.Sequence):
 
         y = np.zeros((self.batch_size, 2))
 
-        x_1 = sample[indices,-1][:,self.bands]
+        x_1 = sample[indices,1][:,self.bands]#sample[indices,-1][:,self.bands]
 
         x_2 = np.zeros((self.batch_size,64,64,6))
 
         for i in range (self.batch_size):
             z = np.random.random_integers(new_data['nb_blended_gal'][indices[i]])
-            fwhm_lsst = new_data['fwhm_lsst'][indices[i]]
+            fwhm_lsst = 0.65#new_data['fwhm_lsst'][indices[i]]
             PSF_lsst = galsim.Kolmogorov(fwhm=fwhm_lsst)
             psf = PSF_lsst.shift((shifts[indices,z-1][i,0],shifts[indices,z-1][i,1]))
             temp_img = galsim.ImageF(img_size, img_size, scale=pixel_scale_lsst)
             psf.drawImage(image=temp_img)
             for m in range(6):
                 x_2[i,:,:,m]=temp_img.array.data
-            y[i,0] = np.array(new_data['e1_fit_'+str(z-1)][indices[i]])
-            y[i,1] = np.array(new_data['e2_fit_'+str(z-1)][indices[i]])
+            y[i,0] = np.array(new_data['e1_'+str(z-1)][indices[i]])#fit_
+            y[i,1] = np.array(new_data['e2_'+str(z-1)][indices[i]])#fit_
             #y[i,2] = np.log(np.array(new_data['redshift_'+str(z-1)][indices[i]]))
         
         # Preprocessing of the data to be easier for the network to learn
@@ -528,3 +531,1115 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
             return (x_1, x_2), y
         elif self.trainval_or_test == 'test':
             return (x_1, x_2), y
+
+
+
+
+
+class BatchGenerator_dc2_deconv(tensorflow.keras.utils.Sequence):
+    """
+    Class to create batch generator for the LSST VAE.
+    """
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+        """
+        Initialization function
+        total_sample_size: size of the whole training (or validation) sample
+        batch_size: size of the batches to provide
+        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
+#        path: path to the first numpy array taken in which the batch will be taken
+        training_or_validation: choice between training of validation generator
+        x: input of the neural network
+        y: target of the neural network
+        r: random value to sample into the validation sample
+        """
+        self.bands = bands
+        self.nbands = len(bands)
+        self.total_sample_size = total_sample_size
+        self.batch_size = batch_size
+        self.list_of_samples = list_of_samples
+        self.trainval_or_test = trainval_or_test
+        self.path = path
+        
+        self.epoch = 0
+        self.do_norm = do_norm
+        self.denorm = denorm
+
+        # Weights computed from the lengths of lists
+        self.p = []
+        for sample in self.list_of_samples:
+            temp = np.load(sample, mmap_mode = 'c')
+            self.p.append(float(len(temp)))
+        self.p = np.array(self.p)
+        self.total_sample_size = int(np.sum(self.p))
+        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+
+        self.p /= np.sum(self.p)
+
+        self.produced_samples = 0
+        self.list_of_weights_e = list_of_weights_e
+        #self.shifts = shifts
+
+    def __len__(self):
+        """
+        Function to define the length of an epoch
+        """
+        return int(float(self.total_sample_size) / float(self.batch_size))      
+
+    def on_epoch_end(self):
+        """
+        Function executed at the end of each epoch
+        """
+        # indices = 0
+        #print("Produced samples", self.produced_samples)
+        self.produced_samples = 0
+        
+    def __getitem__(self, idx):
+        """
+        Function which returns the input and target batches for the network
+        """
+        # If the generator is a training generator, the whole sample is displayed
+        #sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+        #index = np.random.choice(1)
+        index = np.random.choice(list(range(len(self.p))), p=self.p)
+        sample_filename = self.list_of_samples[index]
+        #print(sample_filename)
+        sample = np.load(sample_filename, mmap_mode = 'c')
+        data = pd.read_csv(sample_filename.replace('sample.npy','data.csv'))
+        psf = np.load(sample_filename.replace('img_sample.npy','psf_sample.npy'), mmap_mode = 'c')
+
+        new_data = data[(np.abs(data['e1'])<=1.) &
+                        (np.abs(data['e2'])<=1.)]# &
+                        #(data['snr_r']<100)]#snr_r
+                        #(np.abs(data['blendedness'])==0.)]# &
+
+
+            
+        if self.list_of_weights_e == None:
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False)
+        else:
+            self.weights_e = np.load(self.list_of_weights_e[index])
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
+
+        self.produced_samples += len(indices)
+        
+        ell_1 = np.array(new_data['e1'][indices])
+        ell_2 = np.array(new_data['e2'][indices])
+        shear_1 = np.array(new_data['shear_1'][indices])
+        shear_2 = np.array(new_data['shear_2'][indices])
+        convergence = np.array(new_data['convergence'][indices])
+        
+        ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
+
+        #ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
+        #ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
+        
+        ############
+        data_gen = pd.read_csv('/sps/lsst/users/barcelin/data/dc2_test/training_mag_24.5/1_img_data.csv')
+        ell_1_test = np.array(data_gen['e1'])
+        ell_2_test = np.array(data_gen['e2'])
+        shear_1_test = np.array(data_gen['shear_1'])
+        shear_2_test = np.array(data_gen['shear_2'])
+        convergence_test = np.array(data_gen['convergence'])
+
+        ellipticity_1_test = calc_lensed_ellipticity_1(ell_1_test, ell_2_test, shear_1_test, shear_2_test, convergence_test)
+        ellipticity_2_test = calc_lensed_ellipticity_2(ell_1_test, ell_2_test, shear_1_test, shear_2_test, convergence_test)
+        quantile_transformer_1 = preprocessing.QuantileTransformer(output_distribution='normal', random_state=0) #
+        #quantile_transformer_1 = quantile_transformer_1.fit(ellipticity_conversion(ellipticity_1_test).reshape(-1, 1))
+        quantile_transformer_1 = quantile_transformer_1.fit(ellipticity_1_test.reshape(-1, 1))
+        quantile_transformer_2 = preprocessing.QuantileTransformer(output_distribution='normal', random_state=0) #output_distribution='normal',
+        #quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_conversion(ellipticity_2_test).reshape(-1, 1))
+        quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_2_test.reshape(-1, 1))
+
+        ################
+        interp = 'lanczos15'
+        fwhm_lsst = [1.3,1.3,1.3,1.3,1.3,1.3]#[1.1, 1., 1., 0.9, 1., 1.3] ## Max of PSF in all bands
+        PSF_lsst = [galsim.Kolmogorov(fwhm=fwhm_lsst[k]) for k in range (6)]
+        #print(PSF_lsst)
+        
+        x_1_deconv = np.zeros((self.batch_size,59,59,len(self.bands)))
+        
+        x_1 = sample[indices][:,:,:,self.bands]#np.zeros((self.batch_size,59,59,6))
+        x_2 = psf[indices][:,:,:,self.bands]#np.zeros((self.batch_size,59,59,6))
+        #print(x_1.shape)
+        # We smooth with a Gaussian kernel with x_stddev=1 (and y_stddev=1)
+        # It is a 9x9 array
+        kernel = Gaussian2DKernel(x_stddev=(1.5/0.2)/2.355)#1.22
+
+        y = np.zeros((self.batch_size, 2))
+        
+        try:
+            i=0
+            x_1_temp = np.concatenate((x_1,x_1), axis = 0)
+            x_2_temp = np.concatenate((x_2,x_2), axis = 0)
+            galsim_img = galsim.ImageF(59, 59, scale=0.2)
+            while ((i+1) < self.batch_size):
+                #print(i)
+                for j in range (len(self.bands)):
+                    # Deconvolution with galsim
+                    psf_img = galsim.Image(x_2_temp[i,:,:,j].copy())
+                    gal_img = galsim.Image(x_1_temp[i,:,:,j].copy())
+                    
+                    psf_int = galsim.InterpolatedImage(psf_img,x_interpolant= interp, scale = 0.2)
+                    gal_int = galsim.InterpolatedImage(gal_img,x_interpolant= interp, scale = 0.2)
+                    inv_psf = galsim.Deconvolve(psf_int)
+                    deconv_gal = galsim.Convolve(inv_psf, gal_int)
+                    gal = galsim.Convolve(deconv_gal, PSF_lsst[j])
+                    _ = gal.drawImage(image=galsim_img)
+                    x_1[i,:,:,j] = galsim_img.array.data
+                i+=1
+                x_2[i]=x_2_temp[i]
+                y[i,0] = -ellipticity_1[i]
+                y[i,1] = ellipticity_2[i]
+                #break
+        except RuntimeError as e:
+            print(e)
+        # Deconvolution by PSF image and reconvolution by larger psf
+        # for i in range (self.batch_size):
+        #     for j in range (len(self.bands)):
+        #         #x_1_deconv[i,:,:,j],_ = restoration.deconvolution.unsupervised_wiener(x_1[i,:,:,j], x_2[i,:,:,j])
+        #         x_1_deconv[i,:,:,j] = restoration.deconvolution.wiener(x_1[i,:,:,j], x_2[i,:,:,j], 0.15)
+        #         x_1[i,:,:,j] = convolve(x_1_deconv[i,:,:,j], kernel)
+        ################
+
+        
+        #flip : flipping the image array
+        rand = np.random.randint(4)
+
+        if rand == 1: 
+            x_1 = np.flip(x_1, axis=2)
+            x_2 = np.flip(x_2, axis=2)
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0] # sign changed
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            y[:,0] = -quantile_transformer_1.transform(y[:,0].reshape(-1, 1))[:,0] # sign changed #ellipticity_1.reshape(-1, 1)
+            y[:,1] = -quantile_transformer_2.transform(y[:,1].reshape(-1, 1))[:,0] #ellipticity_2.reshape(-1, 1)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -ellipticity_1 # sign changed
+            #y[:,1] = -ellipticity_2
+        elif rand == 2:
+            x_1 = np.swapaxes(x_1, 2, 1)
+            x_2 = np.swapaxes(x_2, 2, 1)
+            #y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            y[:,0] = +quantile_transformer_1.transform(y[:,0].reshape(-1, 1))[:,0]
+            y[:,1] = quantile_transformer_1.transform(y[:,1].reshape(-1, 1))[:,0]
+            #y[:,2] = new_data['redshift'][indices]         
+            #y[:,0] = +ellipticity_1
+            #y[:,1] = ellipticity_2
+        elif rand == 3:
+            x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
+            x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
+            #y[:,0] = +quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            y[:,0] = +quantile_transformer_1.transform(y[:,0].reshape(-1, 1))[:,0]
+            y[:,1] = -quantile_transformer_1.transform(y[:,1].reshape(-1, 1))[:,0]
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = +ellipticity_1
+            #y[:,1] = -ellipticity_2
+        else:
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_conversion(ellipticity_1).reshape(-1, 1))[:,0]
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_conversion(ellipticity_2).reshape(-1, 1))[:,0]
+            y[:,0] = -quantile_transformer_1.transform(y[:,0].reshape(-1, 1))[:,0]
+            y[:,1] = quantile_transformer_1.transform(y[:,1].reshape(-1, 1))[:,0]
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -ellipticity_1
+            #y[:,1] = ellipticity_2
+        if len(self.bands)==1:
+            x_1 = np.expand_dims(x_1, axis=-1)
+            x_2 = np.expand_dims(x_2, axis=-1)
+
+        #print(y)
+        #x_1 = np.arcsinh(x_1/0.01)
+        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
+            return (x_1, x_2), y
+        elif self.trainval_or_test == 'test':
+            return (x_1, x_2), y
+
+
+
+
+
+class BatchGenerator_dc2_deconv_2(tensorflow.keras.utils.Sequence):
+    """
+    Class to create batch generator for the LSST VAE.
+    """
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+        """
+        Initialization function
+        total_sample_size: size of the whole training (or validation) sample
+        batch_size: size of the batches to provide
+        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
+#        path: path to the first numpy array taken in which the batch will be taken
+        training_or_validation: choice between training of validation generator
+        x: input of the neural network
+        y: target of the neural network
+        r: random value to sample into the validation sample
+        """
+        self.bands = bands
+        self.nbands = len(bands)
+        self.total_sample_size = total_sample_size
+        self.batch_size = batch_size
+        self.list_of_samples = list_of_samples
+        self.trainval_or_test = trainval_or_test
+        self.path = path
+        
+        self.epoch = 0
+        self.do_norm = do_norm
+        self.denorm = denorm
+
+        # Weights computed from the lengths of lists
+        self.p = []
+        for sample in self.list_of_samples:
+            temp = np.load(sample, mmap_mode = 'c')
+            self.p.append(float(len(temp)))
+        self.p = np.array(self.p)
+        self.total_sample_size = int(np.sum(self.p))
+        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+
+        self.p /= np.sum(self.p)
+
+        self.produced_samples = 0
+        self.list_of_weights_e = list_of_weights_e
+        #self.shifts = shifts
+
+    def __len__(self):
+        """
+        Function to define the length of an epoch
+        """
+        return int(float(self.total_sample_size) / float(self.batch_size))      
+
+    def on_epoch_end(self):
+        """
+        Function executed at the end of each epoch
+        """
+        # indices = 0
+        #print("Produced samples", self.produced_samples)
+        self.produced_samples = 0
+        
+    def __getitem__(self, idx):
+        """
+        Function which returns the input and target batches for the network
+        """
+        # If the generator is a training generator, the whole sample is displayed
+        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+        #index = np.random.choice(1)
+        #index = np.random.choice(list(range(len(self.p))), p=self.p)
+        #sample_filename = self.list_of_samples[index]
+
+        sample = np.load(sample_filename, mmap_mode = 'c')
+        data = pd.read_csv(sample_filename.replace('img_noiseless_sample','img_noiseless_data').replace('.npy','.csv'))
+        psf = np.load(sample_filename.replace('img_noiseless_sample','psf_cropped_sample'), mmap_mode = 'c')
+        #print(len(data['e1']))
+        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
+
+        ell_1 = np.array(data['e1'])
+        ell_2 = np.array(data['e2'])
+        shear_1 = np.array(data['shear_1'])
+        shear_2 = np.array(data['shear_2'])
+        convergence = np.array(data['convergence'])
+        
+        ellipticity = calc_lensed_ellipticity(-ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
+
+        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(-ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(-ell_1, ell_2, shear_1, shear_2, convergence))
+        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
+        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
+
+        data['ellipticity_1_lensed'] = ellipticity_1
+        data['ellipticity_2_lensed'] = ellipticity_2
+
+        new_data = data[(np.abs(data['e1'])<=1.) &
+                        (np.abs(data['e2'])<=1.)]
+                        #(np.abs(data['ellipticity_1_lensed'])<=0.5) &
+                        #(np.abs(data['ellipticity_2_lensed'])<=0.5)]
+                        #(data['snr_r']>20)]#snr_r
+                        #(np.abs(data['blendedness'])==0.)]# &
+        #print(len(new_data['e1']))
+        
+        if self.list_of_weights_e == None:
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
+        else:
+            self.weights_e = np.load(self.list_of_weights_e[index])
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
+
+        self.produced_samples += len(indices)
+        
+        x_1 = sample[indices][:,:,:,self.bands]
+        x_2 = psf[indices][:,:,:,self.bands]
+        y = np.zeros((self.batch_size, 2))
+        ellipticity_1 = new_data['ellipticity_1_lensed'][indices]
+        ellipticity_2 = new_data['ellipticity_1_lensed'][indices]
+
+        #flip : flipping the image array
+        rand = np.random.randint(4)
+        if rand == 1: 
+            x_1 = np.flip(x_1, axis=2)
+            x_2 = np.flip(x_2, axis=2)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1 # sign changed
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = -ellipticity_2
+        elif rand == 2:
+            x_1 = np.swapaxes(x_1, 2, 1)
+            x_2 = np.swapaxes(x_2, 2, 1)
+            #y[:,2] = new_data['redshift'][indices]         
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = ellipticity_1
+            y[:,1] = ellipticity_2
+        elif rand == 3:
+            x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
+            x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = ellipticity_1
+            y[:,1] = -ellipticity_2
+        else:
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = ellipticity_2
+        if len(self.bands)==1:
+            x_1 = np.expand_dims(x_1, axis=-1)
+            x_2 = np.expand_dims(x_2, axis=-1)
+
+        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
+            return (x_1, x_2), y
+        elif self.trainval_or_test == 'test':
+            return (x_1, x_2), y
+
+
+
+
+
+class BatchGenerator_dc2_deconv_noisy(tensorflow.keras.utils.Sequence):
+    """
+    Class to create batch generator for the LSST VAE.
+    """
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+        """
+        Initialization function
+        total_sample_size: size of the whole training (or validation) sample
+        batch_size: size of the batches to provide
+        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
+#        path: path to the first numpy array taken in which the batch will be taken
+        training_or_validation: choice between training of validation generator
+        x: input of the neural network
+        y: target of the neural network
+        r: random value to sample into the validation sample
+        """
+        self.bands = bands
+        self.nbands = len(bands)
+        self.total_sample_size = total_sample_size
+        self.batch_size = batch_size
+        self.list_of_samples = list_of_samples
+        self.trainval_or_test = trainval_or_test
+        self.path = path
+        
+        self.epoch = 0
+        self.do_norm = do_norm
+        self.denorm = denorm
+
+        # Weights computed from the lengths of lists
+        self.p = []
+        for sample in self.list_of_samples:
+            temp = np.load(sample, mmap_mode = 'c')
+            self.p.append(float(len(temp)))
+        self.p = np.array(self.p)
+        self.total_sample_size = int(np.sum(self.p))
+        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+
+        self.p /= np.sum(self.p)
+
+        self.produced_samples = 0
+        self.list_of_weights_e = list_of_weights_e
+        #self.shifts = shifts
+
+    def __len__(self):
+        """
+        Function to define the length of an epoch
+        """
+        return int(float(self.total_sample_size) / float(self.batch_size))      
+
+    def on_epoch_end(self):
+        """
+        Function executed at the end of each epoch
+        """
+        # indices = 0
+        #print("Produced samples", self.produced_samples)
+        self.produced_samples = 0
+        
+    def __getitem__(self, idx):
+        """
+        Function which returns the input and target batches for the network
+        """
+        # If the generator is a training generator, the whole sample is displayed
+        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+        #index = np.random.choice(1)
+        #index = np.random.choice(list(range(len(self.p))), p=self.p)
+        #sample_filename = self.list_of_samples[index]
+
+        sample = np.load(sample_filename, mmap_mode = 'c')
+        data = pd.read_csv(sample_filename.replace('img_cropped_sample','img_noiseless_data').replace('.npy','.csv'))
+        psf = np.load(sample_filename.replace('img_cropped_sample','psf_cropped_sample'), mmap_mode = 'c')
+        #print(len(data['e1']))
+        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
+
+
+        ell_1 = np.array(data['e1'])
+        ell_2 = np.array(data['e2'])
+        shear_1 = np.array(data['shear_1'])
+        shear_2 = np.array(data['shear_2'])
+        convergence = np.array(data['convergence'])
+        
+        ellipticity = calc_lensed_ellipticity(-ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
+
+        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(-ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(-ell_1, ell_2, shear_1, shear_2, convergence))
+        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
+        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
+
+        data['ellipticity_1_lensed'] = ellipticity_1
+        data['ellipticity_2_lensed'] = ellipticity_2
+
+        new_data = data[(np.abs(data['e1'])<=1.) &
+                        (np.abs(data['e2'])<=1.)]# &
+                        #(data['snr_r']>20)]#snr_r
+                        #(np.abs(data['blendedness'])==0.)]# &
+        #print(len(new_data['e1']))
+        
+        if self.list_of_weights_e == None:
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
+        else:
+            self.weights_e = np.load(self.list_of_weights_e[index])
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
+
+        self.produced_samples += len(indices)
+        
+        x_1 = sample[indices][:,:,:,self.bands]
+        x_2 = psf[indices][:,:,:,self.bands]
+        y = np.zeros((self.batch_size, 2))
+        ellipticity_1 = new_data['ellipticity_1_lensed'][indices]
+        ellipticity_2 = new_data['ellipticity_1_lensed'][indices]
+
+        #flip : flipping the image array
+        rand = np.random.randint(4)
+        if rand == 1: 
+            x_1 = np.flip(x_1, axis=2)
+            x_2 = np.flip(x_2, axis=2)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1 # sign changed
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = -ellipticity_2
+        elif rand == 2:
+            x_1 = np.swapaxes(x_1, 2, 1)
+            x_2 = np.swapaxes(x_2, 2, 1)
+            #y[:,2] = new_data['redshift'][indices]         
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = ellipticity_1
+            y[:,1] = ellipticity_2
+        elif rand == 3:
+            x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
+            x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = ellipticity_1
+            y[:,1] = -ellipticity_2
+        else:
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = ellipticity_2
+        if len(self.bands)==1:
+            x_1 = np.expand_dims(x_1, axis=-1)
+            x_2 = np.expand_dims(x_2, axis=-1)
+
+        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
+            return (x_1, x_2), y
+        elif self.trainval_or_test == 'test':
+            return (x_1, x_2), y
+
+
+
+
+
+
+
+
+
+
+
+
+
+class BatchGenerator_dc2_redshift(tensorflow.keras.utils.Sequence):
+    """
+    Class to create batch generator for the LSST VAE.
+    """
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+        """
+        Initialization function
+        total_sample_size: size of the whole training (or validation) sample
+        batch_size: size of the batches to provide
+        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
+#        path: path to the first numpy array taken in which the batch will be taken
+        training_or_validation: choice between training of validation generator
+        x: input of the neural network
+        y: target of the neural network
+        r: random value to sample into the validation sample
+        """
+        self.bands = bands
+        self.nbands = len(bands)
+        self.total_sample_size = total_sample_size
+        self.batch_size = batch_size
+        self.list_of_samples = list_of_samples
+        self.trainval_or_test = trainval_or_test
+        self.path = path
+        
+        self.epoch = 0
+        self.do_norm = do_norm
+        self.denorm = denorm
+
+        # Weights computed from the lengths of lists
+        self.p = []
+        for sample in self.list_of_samples:
+            temp = np.load(sample, mmap_mode = 'c')
+            self.p.append(float(len(temp)))
+        self.p = np.array(self.p)
+        self.total_sample_size = int(np.sum(self.p))
+        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+
+        self.p /= np.sum(self.p)
+
+        self.produced_samples = 0
+        self.list_of_weights_e = list_of_weights_e
+        #self.shifts = shifts
+
+    def __len__(self):
+        """
+        Function to define the length of an epoch
+        """
+        return int(float(self.total_sample_size) / float(self.batch_size))      
+
+    def on_epoch_end(self):
+        """
+        Function executed at the end of each epoch
+        """
+        # indices = 0
+        #print("Produced samples", self.produced_samples)
+        self.produced_samples = 0
+        
+    def __getitem__(self, idx):
+        """
+        Function which returns the input and target batches for the network
+        """
+        # If the generator is a training generator, the whole sample is displayed
+        #sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+        #index = np.random.choice(1)
+        index = np.random.choice(list(range(len(self.p))), p=self.p)
+        sample_filename = self.list_of_samples[index]
+        #print(sample_filename)
+        sample = np.load(sample_filename, mmap_mode = 'c')
+        data = pd.read_csv(sample_filename.replace('sample.npy','data.csv'))
+        psf = np.load(sample_filename.replace('img_sample.npy','psf_sample.npy'), mmap_mode = 'c')
+
+        new_data = data[(np.abs(data['e1'])<=1.) &
+                        (np.abs(data['e2'])<=1.)]
+            
+        if self.list_of_weights_e == None:
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False)
+        else:
+            self.weights_e = np.load(self.list_of_weights_e[index])
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
+
+        self.produced_samples += len(indices)
+        
+        x_1 = sample[indices][:,:,:,self.bands]
+        x_2 = psf[indices][:,:,:,self.bands]
+        #print(x_1.shape)
+        #print(x_2.shape)
+
+        y = new_data['redshift'][indices]
+
+        #flip : flipping the image array
+        rand = np.random.randint(4)
+        if rand == 1: 
+            x_1 = np.flip(x_1, axis=2)
+            x_2 = np.flip(x_2, axis=2)
+        elif rand == 2:
+            x_1 = np.swapaxes(x_1, 2, 1)
+            x_2 = np.swapaxes(x_2, 2, 1)
+        elif rand == 3:
+            x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
+            x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
+
+        if len(self.bands)==1:
+            x_1 = np.expand_dims(x_1, axis=-1)
+            x_2 = np.expand_dims(x_2, axis=-1)
+        
+        y = np.expand_dims(y, axis=-1)
+
+        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
+            return (x_1, x_2), y
+        elif self.trainval_or_test == 'test':
+            return (x_1, x_2), y
+
+
+class BatchGenerator_dc2_one_input(tensorflow.keras.utils.Sequence):
+    """
+    Class to create batch generator for the LSST VAE.
+    """
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+        """
+        Initialization function
+        total_sample_size: size of the whole training (or validation) sample
+        batch_size: size of the batches to provide
+        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
+#        path: path to the first numpy array taken in which the batch will be taken
+        training_or_validation: choice between training of validation generator
+        x: input of the neural network
+        y: target of the neural network
+        r: random value to sample into the validation sample
+        """
+        self.bands = bands
+        self.nbands = len(bands)
+        self.total_sample_size = total_sample_size
+        self.batch_size = batch_size
+        self.list_of_samples = list_of_samples
+        self.trainval_or_test = trainval_or_test
+        self.path = path
+        
+        self.epoch = 0
+        self.do_norm = do_norm
+        self.denorm = denorm
+
+        # Weights computed from the lengths of lists
+        self.p = []
+        for sample in self.list_of_samples:
+            temp = np.load(sample, mmap_mode = 'c')
+            self.p.append(float(len(temp)))
+        self.p = np.array(self.p)
+        self.total_sample_size = int(np.sum(self.p))
+        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+
+        self.p /= np.sum(self.p)
+
+        self.produced_samples = 0
+        self.list_of_weights_e = list_of_weights_e
+        #self.shifts = shifts
+
+    def __len__(self):
+        """
+        Function to define the length of an epoch
+        """
+        return int(float(self.total_sample_size) / float(self.batch_size))      
+
+    def on_epoch_end(self):
+        """
+        Function executed at the end of each epoch
+        """
+        # indices = 0
+        #print("Produced samples", self.produced_samples)
+        self.produced_samples = 0
+        
+    def __getitem__(self, idx):
+        """
+        Function which returns the input and target batches for the network
+        """
+        # If the generator is a training generator, the whole sample is displayed
+        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+
+        sample = np.load(sample_filename, mmap_mode = 'c')
+        data = pd.read_csv(sample_filename.replace('sample.npy','data.csv'))
+        psf = np.load(sample_filename.replace('img_sample.npy','psf_sample.npy'), mmap_mode = 'c')
+        #print(len(data['e1']))
+        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
+        new_data = data[(np.abs(data['e1'])<=1.) &
+                        (np.abs(data['e2'])<=1.)]# &
+                        #(data['snr_r']>20)]#snr_r
+                        #(np.abs(data['blendedness'])==0.)]# &
+        #print(len(new_data['e1']))
+        
+        if self.list_of_weights_e == None:
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
+        else:
+            self.weights_e = np.load(self.list_of_weights_e[index])
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
+
+        self.produced_samples += len(indices)
+        
+        ell_1 = np.array(new_data['e1'][indices])
+        ell_2 = np.array(new_data['e2'][indices])
+        shear_1 = np.array(new_data['shear_1'][indices])
+        shear_2 = np.array(new_data['shear_2'][indices])
+        convergence = np.array(new_data['convergence'][indices])
+        
+        ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
+
+        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
+        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
+        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
+
+        x = np.zeros((self.batch_size,59,59,12))
+        x[:,:,:,:6] = sample[indices][:,:,:,self.bands]#13866*
+        x[:,:,:,6:] = psf[indices][:,:,:,self.bands]
+        #x_1 = 13866*sample[indices][:,:,:,self.bands]
+        #x_2 = psf[indices][:,:,:,self.bands]
+        y = np.zeros((self.batch_size, 2))
+
+        #flip : flipping the image array
+        rand = np.random.randint(4)
+        if rand == 1: 
+            x = np.flip(x, axis=2)
+            #x_2 = np.flip(x_2, axis=2)
+            y[:,0] = -ellipticity_1
+            y[:,1] = -ellipticity_2
+        elif rand == 2:
+            x = np.swapaxes(x, 2, 1)
+            #x_2 = np.swapaxes(x_2, 2, 1)
+            y[:,0] = +ellipticity_1
+            y[:,1] = ellipticity_2
+        elif rand == 3:
+            x = np.swapaxes(np.flip(x, axis=2), 2, 1)
+            #x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
+            y[:,0] = +ellipticity_1
+            y[:,1] = -ellipticity_2
+        else:
+            y[:,0] = -ellipticity_1
+            y[:,1] = ellipticity_2
+        if len(self.bands)==1:
+            x = np.expand_dims(x, axis=-1)
+            #x_2 = np.expand_dims(x_2, axis=-1)
+
+        #print(x.shape)
+        #x_1 = np.arcsinh(x_1/0.01)
+        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
+            return x, y
+        elif self.trainval_or_test == 'test':
+            return x, y
+
+
+
+class BatchGenerator_dc2_deconv_vae(tensorflow.keras.utils.Sequence):
+    """
+    Class to create batch generator for the LSST VAE.
+    """
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+        """
+        Initialization function
+        total_sample_size: size of the whole training (or validation) sample
+        batch_size: size of the batches to provide
+        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
+#        path: path to the first numpy array taken in which the batch will be taken
+        training_or_validation: choice between training of validation generator
+        x: input of the neural network
+        y: target of the neural network
+        r: random value to sample into the validation sample
+        """
+        self.bands = bands
+        self.nbands = len(bands)
+        self.total_sample_size = total_sample_size
+        self.batch_size = batch_size
+        self.list_of_samples = list_of_samples
+        self.trainval_or_test = trainval_or_test
+        self.path = path
+        
+        self.epoch = 0
+        self.do_norm = do_norm
+        self.denorm = denorm
+
+        # Weights computed from the lengths of lists
+        self.p = []
+        for sample in self.list_of_samples:
+            temp = np.load(sample, mmap_mode = 'c')
+            self.p.append(float(len(temp)))
+        self.p = np.array(self.p)
+        self.total_sample_size = int(np.sum(self.p))
+        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+
+        self.p /= np.sum(self.p)
+
+        self.produced_samples = 0
+        self.list_of_weights_e = list_of_weights_e
+        #self.shifts = shifts
+
+    def __len__(self):
+        """
+        Function to define the length of an epoch
+        """
+        return int(float(self.total_sample_size) / float(self.batch_size))      
+
+    def on_epoch_end(self):
+        """
+        Function executed at the end of each epoch
+        """
+        # indices = 0
+        #print("Produced samples", self.produced_samples)
+        self.produced_samples = 0
+        
+    def __getitem__(self, idx):
+        """
+        Function which returns the input and target batches for the network
+        """
+        # If the generator is a training generator, the whole sample is displayed
+        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+        #index = np.random.choice(1)
+        #index = np.random.choice(list(range(len(self.p))), p=self.p)
+        #sample_filename = self.list_of_samples[index]
+
+        sample = np.load(sample_filename, mmap_mode = 'c')
+        sample_dc2 = np.load(sample_filename.replace('img_noiseless_sample','img_noiseless_sample'), mmap_mode = 'c')
+        data = pd.read_csv(sample_filename.replace('img_noiseless_sample','img_noiseless_data').replace('.npy','.csv'))
+        psf = np.load(sample_filename.replace('img_noiseless_sample','psf_cropped_sample'), mmap_mode = 'c')
+        #print(len(data['e1']))
+        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
+        new_data = data[(np.abs(data['e1'])<=1.) &
+                        (np.abs(data['e2'])<=1.)]# &
+                        #(data['snr_r']>20)]#snr_r
+                        #(np.abs(data['blendedness'])==0.)]# &
+        #print(len(new_data['e1']))
+        
+        if self.list_of_weights_e == None:
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
+        else:
+            self.weights_e = np.load(self.list_of_weights_e[index])
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
+
+        self.produced_samples += len(indices)
+        
+        ell_1 = np.array(new_data['e1'][indices])
+        ell_2 = np.array(new_data['e2'][indices])
+        shear_1 = np.array(new_data['shear_1'][indices])
+        shear_2 = np.array(new_data['shear_2'][indices])
+        convergence = np.array(new_data['convergence'][indices])
+        
+        ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
+
+        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
+
+        x_1 = np.tanh(np.arcsinh(sample_dc2[indices][:,:,:,self.bands]))
+        x_3 = np.tanh(np.arcsinh(sample[indices][:,:,:,self.bands]))
+        x_2 = psf[indices][:,:,:,self.bands]
+        y = np.zeros((self.batch_size, 2))
+
+        #flip : flipping the image array
+        rand = np.random.randint(4)
+        if rand == 1: 
+            x_1 = np.flip(x_1, axis=2)
+            x_2 = np.flip(x_2, axis=2)
+            x_3 = np.flip(x_3, axis=2)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1 # sign changed
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = -ellipticity_2
+        elif rand == 2:
+            x_1 = np.swapaxes(x_1, 2, 1)
+            x_2 = np.swapaxes(x_2, 2, 1)
+            x_3 = np.swapaxes(x_3, 2, 1)
+            #y[:,2] = new_data['redshift'][indices]         
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = +ellipticity_1
+            y[:,1] = ellipticity_2
+        elif rand == 3:
+            x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
+            x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
+            x_3 = np.swapaxes(np.flip(x_3, axis=2), 2, 1)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = +ellipticity_1
+            y[:,1] = -ellipticity_2
+        else:
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = ellipticity_2
+        if len(self.bands)==1:
+            x_1 = np.expand_dims(x_1, axis=-1)
+            x_2 = np.expand_dims(x_2, axis=-1)
+            x_3 = np.expand_dims(x_3, axis=-1)
+
+        #print(y)
+        #x_1 = np.arcsinh(x_1/0.01)
+        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
+            return (x_1, x_2), x_3
+        elif self.trainval_or_test == 'test':
+            return (x_1, x_2), x_3
+
+
+
+class BatchGenerator_dc2_deconv_vae_noisy(tensorflow.keras.utils.Sequence):
+    """
+    Class to create batch generator for the LSST VAE.
+    """
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+        """
+        Initialization function
+        total_sample_size: size of the whole training (or validation) sample
+        batch_size: size of the batches to provide
+        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
+#        path: path to the first numpy array taken in which the batch will be taken
+        training_or_validation: choice between training of validation generator
+        x: input of the neural network
+        y: target of the neural network
+        r: random value to sample into the validation sample
+        """
+        self.bands = bands
+        self.nbands = len(bands)
+        self.total_sample_size = total_sample_size
+        self.batch_size = batch_size
+        self.list_of_samples = list_of_samples
+        self.trainval_or_test = trainval_or_test
+        self.path = path
+        
+        self.epoch = 0
+        self.do_norm = do_norm
+        self.denorm = denorm
+
+        # Weights computed from the lengths of lists
+        self.p = []
+        for sample in self.list_of_samples:
+            temp = np.load(sample, mmap_mode = 'c')
+            self.p.append(float(len(temp)))
+        self.p = np.array(self.p)
+        self.total_sample_size = int(np.sum(self.p))
+        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+
+        self.p /= np.sum(self.p)
+
+        self.produced_samples = 0
+        self.list_of_weights_e = list_of_weights_e
+        #self.shifts = shifts
+
+    def __len__(self):
+        """
+        Function to define the length of an epoch
+        """
+        return int(float(self.total_sample_size) / float(self.batch_size))      
+
+    def on_epoch_end(self):
+        """
+        Function executed at the end of each epoch
+        """
+        # indices = 0
+        #print("Produced samples", self.produced_samples)
+        self.produced_samples = 0
+        
+    def __getitem__(self, idx):
+        """
+        Function which returns the input and target batches for the network
+        """
+        # If the generator is a training generator, the whole sample is displayed
+        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
+        #index = np.random.choice(1)
+        #index = np.random.choice(list(range(len(self.p))), p=self.p)
+        #sample_filename = self.list_of_samples[index]
+
+        sample = np.load(sample_filename, mmap_mode = 'c')
+        sample_dc2 = np.load(sample_filename.replace('img_noiseless_sample','img_cropped_sample'), mmap_mode = 'c')
+        data = pd.read_csv(sample_filename.replace('img_noiseless_sample','img_noiseless_data').replace('.npy','.csv'))
+        psf = np.load(sample_filename.replace('img_noiseless_sample','psf_cropped_sample'), mmap_mode = 'c')
+        #print(len(data['e1']))
+        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
+        new_data = data[(np.abs(data['e1'])<=1.) &
+                        (np.abs(data['e2'])<=1.)]# &
+                        #(data['snr_r']>20)]#snr_r
+                        #(np.abs(data['blendedness'])==0.)]# &
+        #print(len(new_data['e1']))
+        
+        if self.list_of_weights_e == None:
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
+        else:
+            self.weights_e = np.load(self.list_of_weights_e[index])
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
+
+        self.produced_samples += len(indices)
+        
+        ell_1 = np.array(new_data['e1'][indices])
+        ell_2 = np.array(new_data['e2'][indices])
+        shear_1 = np.array(new_data['shear_1'][indices])
+        shear_2 = np.array(new_data['shear_2'][indices])
+        convergence = np.array(new_data['convergence'][indices])
+        
+        ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
+
+        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
+
+        x_1 = np.tanh(np.arcsinh(sample_dc2[indices][:,:,:,self.bands]))
+        x_3 = np.tanh(np.arcsinh(sample[indices][:,:,:,self.bands]))
+        x_2 = psf[indices][:,:,:,self.bands]
+        y = np.zeros((self.batch_size, 2))
+
+        #flip : flipping the image array
+        rand = np.random.randint(4)
+        if rand == 1: 
+            x_1 = np.flip(x_1, axis=2)
+            x_2 = np.flip(x_2, axis=2)
+            x_3 = np.flip(x_3, axis=2)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1 # sign changed
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = -ellipticity_2
+        elif rand == 2:
+            x_1 = np.swapaxes(x_1, 2, 1)
+            x_2 = np.swapaxes(x_2, 2, 1)
+            x_3 = np.swapaxes(x_3, 2, 1)
+            #y[:,2] = new_data['redshift'][indices]         
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = +ellipticity_1
+            y[:,1] = ellipticity_2
+        elif rand == 3:
+            x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
+            x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
+            x_3 = np.swapaxes(np.flip(x_3, axis=2), 2, 1)
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = +ellipticity_1
+            y[:,1] = -ellipticity_2
+        else:
+            #y[:,2] = new_data['redshift'][indices]
+            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
+            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
+            y[:,0] = -ellipticity_1
+            y[:,1] = ellipticity_2
+        if len(self.bands)==1:
+            x_1 = np.expand_dims(x_1, axis=-1)
+            x_2 = np.expand_dims(x_2, axis=-1)
+            x_3 = np.expand_dims(x_3, axis=-1)
+
+        #print(y)
+        #x_1 = np.arcsinh(x_1/0.01)
+        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
+            return (x_1, x_2), x_3
+        elif self.trainval_or_test == 'test':
+            return (x_1, x_2), x_3
+

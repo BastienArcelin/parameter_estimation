@@ -16,9 +16,9 @@ import GCRCatalogs
 import lsst.geom
 import lsst.daf.persistence as dafPersist
 
-tract = '4855'# str(sys.argv[1]) # test: 4855 # training: 5074 # validation: 4637
-training_test_val = 'test_mag_26.5'#str(sys.argv[2]) # test, training, validation
-N = 1000#int(sys.argv[3]) # Usually 10 000 images per file
+tract = str(sys.argv[1]) # test: 4855 # training: 5074 # validation: 4637
+training_test_val = str(sys.argv[2]) # test, training, validation
+N = int(sys.argv[3]) # Usually 10 000 images per file
 
 # Read in the observed galaxy catalog data.
 with warnings.catch_warnings():
@@ -33,7 +33,7 @@ with warnings.catch_warnings():
 # Let's define a magnitude cut
 mag_filters = [
     (np.isfinite, 'mag_r'),
-    'mag_r < 26.5']
+    'mag_r < 24.5']
 
 # Load ra and dec from object, using both of the filters we just defined.
 object_data = gc_obs.get_quantities(['ra', 'dec', 'blendedness', 'snr_r_cModel',
@@ -55,7 +55,7 @@ for ipx in ipix:
 pos_filters=[f'ra >= {min_ra}',f'ra <={max_ra}', f'dec >= {min_dec}', f'dec <= {max_dec}']
 
 # Define a mag cut for truth catalog 
-truth_mag_filters = ['mag_r < 26.5']
+truth_mag_filters = ['mag_r < 24.5']
 
 # Load wanted quantities from truth catalog (https://github.com/LSSTDESC/gcr-catalogs/blob/master/GCRCatalogs/SCHEMA.md)
 quantities = ['galaxy_id', 'ra', 'dec', 
@@ -73,7 +73,7 @@ truth_data = gc.get_quantities(quantities, filters=truth_mag_filters+pos_filters
 # so we need to specify `catalog_len_getter` so that the code knows how to get the length of the catalog.
 results = FoFCatalogMatching.match(
     catalog_dict={'truth': truth_data, 'object': object_data},
-    linking_lengths=0.1, # Linking length of 1 arcsecond, you can play around with the values!
+    linking_lengths=1., # Linking length of 1 arcsecond, you can play around with the values!
     catalog_len_getter=lambda x: len(x['ra']),
 )
 
@@ -228,6 +228,6 @@ df['mag_r_true']=np.array(mag_r_true)[:,0] # Magnitude in input of simulation
 
 # Save the arrays
 data_dir = str(os.environ.get('IMGEN_DC2_DATA'))
-np.save(data_dir+str(training_test_val)+'/img_sample.npy', img_sample)
-np.save(data_dir+str(training_test_val)+'/psf_sample.npy', psf_sample)
-df.to_csv(data_dir+str(training_test_val)+'/img_data.csv', index=False)
+np.save(data_dir+str(training_test_val)+'/2_img_sample.npy', img_sample)
+np.save(data_dir+str(training_test_val)+'/2_psf_sample.npy', psf_sample)
+df.to_csv(data_dir+str(training_test_val)+'/2_img_data.csv', index=False)

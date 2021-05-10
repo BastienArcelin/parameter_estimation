@@ -1,0 +1,16 @@
+         960068 function calls (942385 primitive calls) in 80.408 seconds
+
+   Ordered by: cumulative time
+   List reduced from 537 to 10 due to restriction <10>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000   80.408   80.408 {built-in method builtins.exec}
+        1    0.000    0.000   80.408   80.408 <string>:3(<module>)
+        1    0.000    0.000   80.408   80.408 training.py:596(fit)
+        1    0.002    0.002   80.408   80.408 training_generator.py:565(fit)
+     11/1    0.165    0.015   80.406   80.406 training_generator.py:41(model_iteration)
+      100    0.020    0.000   60.093    0.601 backend.py:3529(__call__)
+      100    0.003    0.000   56.149    0.561 session.py:1466(__call__)
+      100   56.146    0.561   56.146    0.561 {built-in method _pywrap_tensorflow_internal.TF_SessionRunCallable}
+       70    0.019    0.000   49.695    0.710 training.py:1025(train_on_batch)
+     1778   18.607    0.010   18.607    0.010 {method 'acquire' of '_thread.lock' objects}
