@@ -46,7 +46,7 @@ bands = [0,1,2,3,4,5]
 # With generator
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
 images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'#1_matching/'#deconv_conv_24.5/
-print(utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')))
+#print(utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')))
 if (str(sys.argv[5]) == 'noiseless'):
     print('in noiseless')
     list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_noiseless_sample_')]#mag_24.5
@@ -84,10 +84,11 @@ if (str(sys.argv[5]) == 'noiseless'):
 
 else:
     print('Noisy')
-    list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_cropped_sample_')]
-    list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_cropped_sample_')]
+    list_of_samples = [[x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_cropped_sample_')]][0]
+    list_of_samples_val = [[x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_cropped_sample_')]][0]
     #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
-    training_generator = generator.BatchGenerator_dc2_deconv_noisy(bands,
+    print(list_of_samples)
+    training_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
                                         images_dir,
                                         list_of_samples, 
                                         total_sample_size=None,
@@ -97,7 +98,7 @@ else:
                                         denorm = False,
                                         list_of_weights_e=None)
 
-    validation_generator = generator.BatchGenerator_dc2_deconv_noisy(bands,
+    validation_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
                                         images_dir,
                                         list_of_samples_val, 
                                         total_sample_size=None,
@@ -107,7 +108,7 @@ else:
                                         denorm = False,
                                         list_of_weights_e=None)
 
-    test_generator = generator.BatchGenerator_dc2_deconv_noisy(bands, 
+    test_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands, 
                                         images_dir,
                                         list_of_samples_val, 
                                         total_sample_size=None,
