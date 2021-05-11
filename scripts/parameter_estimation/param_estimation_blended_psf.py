@@ -45,6 +45,7 @@ bands = [4,5,6,7,8,9]#
 
 
 # With generator
+<<<<<<< HEAD
 images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
 #images_dir = '/pbs/home/b/barcelin/sps_link/data/psf_change/1_6_test/'
 
@@ -200,6 +201,7 @@ test_ds = tf.data.Dataset.from_generator(test_batch_generator,
 print('construction OK')
 
 #### Model definition
+
 model_choice = 'wo_ls'
 # Without latent space
 if model_choice == 'wo_ls':

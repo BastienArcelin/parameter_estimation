@@ -9,8 +9,7 @@ import tensorflow.keras
 import pandas as pd
 import scipy
 from scipy.stats import norm
-#from sklearn import preprocessing
-
+from sklearn import preprocessing
 from random import choice
 
 sys.path.insert(0,'../tools_for_VAE/')
@@ -21,6 +20,7 @@ import galsim
 from skimage import restoration
 from astropy.convolution import Gaussian2DKernel
 from astropy.convolution import convolve
+
 ######### FOR PSF GENERATION 
 
 
@@ -311,6 +311,8 @@ def calc_lensed_ellipticity(es1, es2, gamma1, gamma2, kappa):
 
 
 class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
+=======
+>>>>>>> 46ea54ac55d613c05b7714624af69a7f534c9afa
     """
     Class to create batch generator for the LSST VAE.
     """
@@ -379,6 +381,7 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         sample_filename = self.list_of_samples[index]
         #print(sample_filename)
         sample = np.load(sample_filename, mmap_mode = 'c')
+
         data = pd.read_csv(sample_filename.replace('sample.npy','data.csv'))
         psf = np.load(sample_filename.replace('img_sample.npy','psf_sample.npy'), mmap_mode = 'c')
 
@@ -386,7 +389,20 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
                         (np.abs(data['e2'])<=1.) &
                         (data['snr_r']<100)]#snr_r
                         #(np.abs(data['blendedness'])==0.)]# &
+        #data = pd.read_csv(sample_filename.replace('images.npy','data.csv'))
+        #shifts = np.load(self.path+self.trainval_or_test+'/shifts/'+sample_filename[-38:].replace('images.npy','shifts.npy'))
 
+        #data = data.replace(to_replace = 10.,value = 0)
+        #print(data)
+        new_data = data[(np.abs(data['e1_fit_0'])<=1.) &#e1_0
+                        (np.abs(data['e2_fit_0'])<=1.) &#e2_0
+                        (np.abs(data['e1_fit_1'])<=1.) &#e1_1
+                        (np.abs(data['e2_fit_1'])<=1.) &#e2_1
+                        (np.abs(data['e1_fit_2'])<=1.) &#e1_2
+                        (np.abs(data['e2_fit_2'])<=1.) &#e2_2
+                        (np.abs(data['e1_fit_3'])<=1.) &#e1_3
+                        (np.abs(data['e2_fit_3'])<=1.) ]#e2_3
+        #print(new_data['nb_blended_gal'])
 
             
         if self.list_of_weights_e == None:
@@ -433,41 +449,38 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
         #quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_conversion(ellipticity_2_test).reshape(-1, 1))
         quantile_transformer_2 = quantile_transformer_2.fit(ellipticity_2_test.reshape(-1, 1))
 
-        ################
-
-        # y = np.zeros((self.batch_size, 2))
-        # X_1 = np.zeros((self.batch_size, 59,59,6))
-        # X_2 = np.zeros((self.batch_size, 59,59,6))
-        # # # flip : flipping the image array
-        # # rand = np.random.randint(4)
-        # for k in range (4):
-        #     if k == 1: 
-        #         X_1[0:int(self.batch_size/4)] = np.flip(x_1[0:int(self.batch_size/4)], axis=2)
-        #         X_2[0:int(self.batch_size/4)] = np.flip(x_2[0:int(self.batch_size/4)], axis=2)
-        #         y[0:int(self.batch_size/4),0] = +(ellipticity_1[0:int(self.batch_size/4)]) 
-        #         y[0:int(self.batch_size/4),1] = -(ellipticity_2[0:int(self.batch_size/4)])
-        #     elif k == 2:
-        #         X_1[1*int(self.batch_size/4):2*int(self.batch_size/4)] = np.swapaxes(x_1[0:int(self.batch_size/4)], 2, 1)
-        #         X_2[1*int(self.batch_size/4):2*int(self.batch_size/4)] = np.swapaxes(x_2[0:int(self.batch_size/4)], 2, 1)
-        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),0] = -(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[1*int(self.batch_size/4):2*int(self.batch_size/4),1] = +(ellipticity_2[0:int(self.batch_size/4)])
-        #     elif k == 3:
-        #         X_1[2*int(self.batch_size/4):3*int(self.batch_size/4)] = np.swapaxes(np.flip(x_1[0:int(self.batch_size/4)], axis=2), 2, 1)
-        #         X_2[2*int(self.batch_size/4):3*int(self.batch_size/4)] = np.swapaxes(np.flip(x_2[0:int(self.batch_size/4)], axis=2), 2, 1)
-        #         y[2*int(self.batch_size/4):3*int(self.batch_size/4),0] = -(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[2*int(self.batch_size/4):3*int(self.batch_size/4),1] = -(ellipticity_2[0:int(self.batch_size/4)])
-        #     else:
-        #         X_1[3*int(self.batch_size/4):4*int(self.batch_size/4)] = x_1[0:int(self.batch_size/4)]
-        #         X_2[3*int(self.batch_size/4):4*int(self.batch_size/4)] = x_2[0:int(self.batch_size/4)]
-        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),0] = +(ellipticity_1[0:int(self.batch_size/4)])
-        #         y[3*int(self.batch_size/4):4*int(self.batch_size/4),1] = +(ellipticity_2[0:int(self.batch_size/4)])
-        # x_1 = X_1
-        # x_2 = X_2
 
 
         y = np.zeros((self.batch_size, 3))
         #flip : flipping the image array
         rand = np.random.randint(4)
+
+        y = np.zeros((self.batch_size, 2))
+
+        x_1 = sample[indices,-1][:,self.bands]
+
+        x_2 = np.zeros((self.batch_size,64,64,6))
+
+        for i in range (self.batch_size):
+            z = np.random.random_integers(new_data['nb_blended_gal'][indices[i]])
+            fwhm_lsst = new_data['fwhm_lsst'][indices[i]]
+            PSF_lsst = galsim.Kolmogorov(fwhm=fwhm_lsst)
+            psf = PSF_lsst.shift((shifts[indices,z-1][i,0],shifts[indices,z-1][i,1]))
+            temp_img = galsim.ImageF(img_size, img_size, scale=pixel_scale_lsst)
+            psf.drawImage(image=temp_img)
+            for m in range(6):
+                x_2[i,:,:,m]=temp_img.array.data
+            y[i,0] = np.array(new_data['e1_fit_'+str(z-1)][indices[i]])
+            y[i,1] = np.array(new_data['e2_fit_'+str(z-1)][indices[i]])
+            #y[i,2] = np.log(np.array(new_data['redshift_'+str(z-1)][indices[i]]))
+        
+        # Preprocessing of the data to be easier for the network to learn
+        if self.do_norm:
+            x_1 = utils.norm(x_1, self.bands, n_years = 5)
+        if self.denorm:
+            x_1 = utils.denorm(x_1, self.bands, n_years = 5)
+        
+        x_1 = np.transpose(x_1, axes = (0,2,3,1))
         
         # ####### Test of normalization
         # I = [3.4725035028144715, 
@@ -533,7 +546,27 @@ class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
             return (x_1, x_2), y
 
 
+## Compute lensed ellipticities from shear and 
+def calc_lensed_ellipticity_1(es1, es2, gamma1, gamma2, kappa):
+    gamma = gamma1 + gamma2*1j # shear (as a complex number)
+    es =  es1 + es2*1j # intrinsic ellipticity (as a complex number)
+    g = gamma / (1.0 - kappa) # reduced shear
+    e = (es + g) / (1.0 + g.conjugate()*es) # lensed ellipticity
+    return np.real(e)
 
+def calc_lensed_ellipticity_2(es1, es2, gamma1, gamma2, kappa):
+    gamma = gamma1 + gamma2*1j # shear (as a complex number)
+    es =   es1 + es2*1j # intrinsic ellipticity (as a complex number)
+    g = gamma / (1.0 - kappa) # reduced shear
+    e = (es + g) / (1.0 + g.conjugate()*es) # lensed ellipticity
+    return np.imag(e)
+
+def calc_lensed_ellipticity(es1, es2, gamma1, gamma2, kappa):
+    gamma = gamma1 + gamma2*1j # shear (as a complex number)
+    es =   es1 + es2*1j # intrinsic ellipticity (as a complex number)
+    g = gamma / (1.0 - kappa) # reduced shear
+    e = (es + g) / (1.0 + g.conjugate()*es) # lensed ellipticity
+    return np.absolute(e)
 
 
 class BatchGenerator_dc2_deconv(tensorflow.keras.utils.Sequence):
@@ -612,7 +645,6 @@ class BatchGenerator_dc2_deconv(tensorflow.keras.utils.Sequence):
                         (np.abs(data['e2'])<=1.)]# &
                         #(data['snr_r']<100)]#snr_r
                         #(np.abs(data['blendedness'])==0.)]# &
-
 
             
         if self.list_of_weights_e == None:

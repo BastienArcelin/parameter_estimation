@@ -45,6 +45,7 @@ bands = [0,1,2,3,4,5]
 
 # With generator
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
+<<<<<<< HEAD
 images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'#1_matching/'#deconv_conv_24.5/
 #print(utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')))
 if (str(sys.argv[5]) == 'noiseless'):
@@ -118,10 +119,6 @@ else:
                                         denorm = False,
                                         list_of_weights_e=None)
 
-print(list_of_samples)
-print(list_of_samples_val)
-
-
 
 # NEW: Wrap the generator.BatchGenerator objects in a generator-style function
 # which we can then pass to tf.data.Dataset.from_generator()
@@ -170,6 +167,7 @@ test_ds = tf.data.Dataset.from_generator(test_batch_generator,
 print('construction OK')
 
 #### Model definition
+
 model_choice = str(sys.argv[1])
 # Without latent space
 if model_choice == 'wo_ls_fft_moments':#create_model_wo_ls_resnet #create_model_wo_ls_peak_3 #create_model_3D
@@ -184,12 +182,7 @@ if model_choice == 'wo_ls':#create_model_wo_ls_resnet #create_model_wo_ls_peak_3
     net = model.create_model_wo_ls_peak_pooling(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
 if model_choice == 'wo_ls_concat_one':#create_model_wo_ls_resnet #create_model_wo_ls_peak_3 #create_model_3D
     net = model.create_model_wo_ls_peak_pooling_concat_one(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
-# Full probabilistic model with reparametrization trick
-if model_choice == 'full_prob_rt':
-    net = model.create_model_prob_rt_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
-# Full probabilistic model with flipout
-if model_choice == 'full_prob_flipout':
-    net = model.create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+
 net.summary()
 
 #### Loss definition
@@ -231,6 +224,7 @@ def kl_metric(y_true, y_pred):
     return K.sum(net.losses)
 mse = tf.keras.losses.MeanSquaredError()
 
+<<<<<<< HEAD
 net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5),
               loss=negative_log_likelihood,
               metrics = ['mse', 'acc',kl_metric],
@@ -258,6 +252,7 @@ callbacks = [checkpointer_mse, checkpointer_loss]#, checkpointer_acc]#, alpha_ch
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
+<<<<<<< HEAD
 hist = net.fit(training_generator, epochs=1000,#training_ds
                     steps_per_epoch=steps_per_epoch,
                     verbose=2,
@@ -295,6 +290,7 @@ sns.distplot(training_labels[:,1], bins = 20)
 fig.savefig('full_prob/test_distrib_e2.png')
 
 
+
 # fig = plt.figure()
 # sns.distplot(K.get_value(out.mean())[:,2], bins = 20)# out.mean().numpy()
 # sns.distplot(training_labels[:,2], bins = 20)
@@ -304,6 +300,7 @@ fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 nb_of_points = 100
 axes[0].errorbar(training_labels[:nb_of_points,0], K.get_value(out.mean())[:nb_of_points,0], yerr = 2*K.get_value(out.stddev())[:nb_of_points,0],  fmt='.', elinewidth=0.5, label = 'mean +/- 2*stddev')
+<<<<<<< HEAD
 x = np.linspace(-1,1)#(-1,1)#-0,5
 axes[0].plot(x, x)
 axes[0].legend()

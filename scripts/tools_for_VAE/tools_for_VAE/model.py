@@ -14,15 +14,17 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import metrics
 from tensorflow.keras.layers import Input, Dense, Lambda, Layer, Add, Multiply, Reshape, Flatten, BatchNormalization
 from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.layers import LocallyConnected2D, Conv2D, Conv3D, Input, Dense, Dropout, MaxPool2D, Flatten,  Reshape, UpSampling2D, Cropping2D, Conv2DTranspose, PReLU, Concatenate, Lambda, BatchNormalization, concatenate, LeakyReLU, GlobalAveragePooling2D
 
+from tensorflow.keras.layers import LocallyConnected2D, Conv2D, Conv3D, Input, Dense, Dropout, MaxPool2D, Flatten,  Reshape, UpSampling2D, Cropping2D, Conv2DTranspose, PReLU, Concatenate, Lambda, BatchNormalization, concatenate, LeakyReLU, GlobalAveragePooling2D
 import tensorflow as tf
 tfd = tfp.distributions
+
 
 #from keras_gcnn.layers import GConv2D, GroupPool
 
 sys.path.insert(0,'../../scripts/tools_for_VAE/')
 from tools_for_VAE import ktied_distribution
+
 
 def create_model_old(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     tfd = tfp.distributions
@@ -94,6 +96,7 @@ def get_posterior_fn():
 # kernel divergence weight in loss
 kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p) / (40000))
 
+
 def create_model_full_prob_rt(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
 
     input_layer = Input(shape=(input_shape)) 
@@ -159,10 +162,6 @@ def create_model_full_prob_flipout(input_shape, latent_dim, hidden_dim, filters,
     model = Model(input_layer,h)
     
     return model
-
-
-
-
 
 
 # Model with coordinate of target galaxy
@@ -528,7 +527,6 @@ def create_model_wo_ls_peak_pooling_fft_moments(input_shape, latent_dim, hidden_
     return model
 
 
-
 def create_model_full_prob_flipout_dc2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     
     input_layer_1 = Input(shape=(input_shape)) 
@@ -686,21 +684,6 @@ def create_model_wo_ls_resnet(input_shape, latent_dim, hidden_dim, filters, kern
         h_1 = PReLU()(h_1)
         h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_1)
         h_1 = PReLU()(h_1)
-        #h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_1)
-        #h_1 = PReLU()(h_1)
-        h_1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_1)+h
-        h = PReLU()(h_1)
-        # h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
-        # h_2 = PReLU()(h_2)
-        # h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
-        # h_2 = PReLU()(h_2)
-        # h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)+h
-        # h = PReLU()(h_2)
-    h = tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=None, padding='valid')(h)
-    h = Flatten()(h)
-    h = PReLU()(h)
-    #h = Dense(16)(h)
-    #h = PReLU()(h)
     h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
                 activation=None)(tf.cast(h,tf.float64))
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
