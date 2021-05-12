@@ -311,8 +311,6 @@ def calc_lensed_ellipticity(es1, es2, gamma1, gamma2, kappa):
 
 
 class BatchGenerator_dc2(tensorflow.keras.utils.Sequence):
-=======
->>>>>>> 46ea54ac55d613c05b7714624af69a7f534c9afa
     """
     Class to create batch generator for the LSST VAE.
     """
@@ -1171,11 +1169,13 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         """
         Function which returns the input and target batches for the network
         """
-        # Change the proportion of noisy data every 50 epochs:
-        if self.epoch == 50:
+        # Change the proportion of noisy data every 80 epochs:
+        #while self.prop<9:
+        if self.epoch == 80:
             self.prop +=1
             self.epoch = 0
-        
+        if self.prop == 10:
+            self.prop=9
         list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training_24.5_v2/')) if x.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_noiseless_sample_')]
         list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training_24.5_v2/')) if x.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_cropped_sample_')]
         
@@ -1186,11 +1186,14 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
 
         sample_filename = np.random.choice(list_of_samples_used, size = 1)[0]#, p=self.p)
         sample = np.load(sample_filename, mmap_mode = 'c')
-
+        print(sample_filename)
+        
         if sample_filename.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_cropped_sample_')==True:
+            #print('first')
             data = pd.read_csv(sample_filename.replace('img_cropped_sample','img_noiseless_data').replace('.npy','.csv'))
             psf = np.load(sample_filename.replace('img_cropped_sample','psf_cropped_sample'), mmap_mode = 'c')
         else:
+            #print('second')
             data = pd.read_csv(sample_filename.replace('img_noiseless_sample','img_noiseless_data').replace('.npy','.csv'))
             psf = np.load(sample_filename.replace('img_noiseless_sample','psf_cropped_sample'), mmap_mode = 'c')
            
