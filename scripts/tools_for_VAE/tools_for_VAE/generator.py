@@ -827,8 +827,8 @@ class BatchGenerator_dc2_deconv_2(tensorflow.keras.utils.Sequence):
             self.p.append(float(len(temp)))
         self.p = np.array(self.p)
         self.total_sample_size = int(np.sum(self.p))
-        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
-        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
+        #print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
+        #print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
 
         self.p /= np.sum(self.p)
 
@@ -883,8 +883,8 @@ class BatchGenerator_dc2_deconv_2(tensorflow.keras.utils.Sequence):
         data['ellipticity_1_lensed'] = ellipticity_1
         data['ellipticity_2_lensed'] = ellipticity_2
 
-        new_data = data[(np.abs(data['e1'])<=1.) &
-                        (np.abs(data['e2'])<=1.)]
+        new_data = data#[(np.abs(data['ellipticity_1_lensed'])<=1.) &
+        #                (np.abs(data['ellipticity_2_lensed'])<=1.)]
                         #(np.abs(data['ellipticity_1_lensed'])<=0.5) &
                         #(np.abs(data['ellipticity_2_lensed'])<=0.5)]
                         #(data['snr_r']>20)]#snr_r
@@ -903,7 +903,7 @@ class BatchGenerator_dc2_deconv_2(tensorflow.keras.utils.Sequence):
         x_2 = psf[indices][:,:,:,self.bands]
         y = np.zeros((self.batch_size, 2))
         ellipticity_1 = new_data['ellipticity_1_lensed'][indices]
-        ellipticity_2 = new_data['ellipticity_1_lensed'][indices]
+        ellipticity_2 = new_data['ellipticity_2_lensed'][indices]
 
         #flip : flipping the image array
         rand = np.random.randint(4)
@@ -1042,8 +1042,8 @@ class BatchGenerator_dc2_deconv_noisy(tensorflow.keras.utils.Sequence):
         data['ellipticity_1_lensed'] = ellipticity_1
         data['ellipticity_2_lensed'] = ellipticity_2
 
-        new_data = data[(np.abs(data['e1'])<=1.) &
-                        (np.abs(data['e2'])<=1.)]# &
+        new_data = data#[(np.abs(data['ellipticity_1_lensed'])<=1.) &
+        #                (np.abs(data['ellipticity_2_lensed'])<=1.)]# &
                         #(data['snr_r']>20)]#snr_r
                         #(np.abs(data['blendedness'])==0.)]# &
         #print(len(new_data['e1']))
@@ -1060,7 +1060,7 @@ class BatchGenerator_dc2_deconv_noisy(tensorflow.keras.utils.Sequence):
         x_2 = psf[indices][:,:,:,self.bands]
         y = np.zeros((self.batch_size, 2))
         ellipticity_1 = new_data['ellipticity_1_lensed'][indices]
-        ellipticity_2 = new_data['ellipticity_1_lensed'][indices]
+        ellipticity_2 = new_data['ellipticity_2_lensed'][indices]
 
         #flip : flipping the image array
         rand = np.random.randint(4)
@@ -1162,7 +1162,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         # indices = 0
         #print("Produced samples", self.produced_samples)
         self.epoch +=1 
-        print(self.epoch)
+        #print(self.epoch)
         self.produced_samples = 0
         
     def __getitem__(self, idx):
@@ -1186,7 +1186,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
 
         sample_filename = np.random.choice(list_of_samples_used, size = 1)[0]#, p=self.p)
         sample = np.load(sample_filename, mmap_mode = 'c')
-        print(sample_filename)
+        #print(sample_filename)
         
         if sample_filename.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_cropped_sample_')==True:
             #print('first')
@@ -1218,8 +1218,8 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         data['ellipticity_1_lensed'] = ellipticity_1
         data['ellipticity_2_lensed'] = ellipticity_2
 
-        new_data = data[(np.abs(data['e1'])<=1.) &
-                        (np.abs(data['e2'])<=1.)]# 
+        new_data = data#[(np.abs(data['ellipticity_1_lensed'])<=1.) &
+        #                (np.abs(data['ellipticity_2_lensed'])<=1.)]# 
                         #(data['snr_r']>20)]#snr_r
                         #(np.abs(data['blendedness'])==0.)]# &
         
@@ -1235,7 +1235,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         x_2 = psf[indices][:,:,:,self.bands]
         y = np.zeros((self.batch_size, 2))
         ellipticity_1 = new_data['ellipticity_1_lensed'][indices]
-        ellipticity_2 = new_data['ellipticity_1_lensed'][indices]
+        ellipticity_2 = new_data['ellipticity_2_lensed'][indices]
 
         #flip : flipping the image array
         rand = np.random.randint(4)

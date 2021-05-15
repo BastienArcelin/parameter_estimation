@@ -84,8 +84,8 @@ if (str(sys.argv[5]) == 'noiseless'):
 
 else:
     print('Noisy')
-    list_of_samples = [[x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_cropped_sample_')]][0]
-    list_of_samples_val = [[x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_cropped_sample_')]][0]
+    list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_cropped_sample_')]
+    list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_cropped_sample_')]
     #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
     print(list_of_samples)
     training_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
@@ -181,10 +181,12 @@ if model_choice == 'wo_ls':
     net = model.create_model_wo_ls_peak_pooling(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 if model_choice == 'wo_ls_concat_one':
     net = model.create_model_wo_ls_peak_pooling_concat_one(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+    #net = model.create_model_shear(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 if model_choice == 'full_prob_flipout':
     net = model.create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 
 net.summary()
+#net.layers[-1].trainable = False
 
 #### Loss definition
 alpha = K.variable(0.)
@@ -224,6 +226,10 @@ else:
 def kl_metric(y_true, y_pred):
     return K.sum(net.losses)
 mse = tf.keras.losses.MeanSquaredError()
+hinge = tf.keras.losses.Hinge()
+maepercent = tf.keras.losses.MeanAbsolutePercentageError()
+mae = tf.keras.losses.MeanAbsoluteError()
+mselog = tf.keras.losses.MeanSquaredLogarithmicError()
 
 net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5),
               loss=negative_log_likelihood,
@@ -252,7 +258,7 @@ callbacks = [checkpointer_mse, checkpointer_loss]#, checkpointer_acc]#, alpha_ch
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
-hist = net.fit(training_generator, epochs=2000,#training_ds
+hist = net.fit(training_generator, epochs=1000,#training_ds
                     steps_per_epoch=steps_per_epoch,
                     verbose=2,
                     shuffle=True,
@@ -323,6 +329,7 @@ fig.savefig('full_prob/test_train.png')
 
 
 ##################################
+# out = net([tf.cast(training_data[0], tf.float32), tf.cast(training_data[1], tf.float32)])
 # fig = plt.figure()
 # out = K.get_value(out)
 # print(out.shape)
@@ -340,17 +347,17 @@ fig.savefig('full_prob/test_train.png')
 # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 # axes[0].plot(training_labels[:,0], out[:,0], '.', label = 'mean')
-# x = np.linspace(-4,4)
+# x = np.linspace(-1,1)
 # axes[0].plot(x, x)
 # axes[0].legend()
-# axes[0].set_ylim(-4,4)
+# axes[0].set_ylim(-1,1)
 # axes[0].set_title('$e1$')
 
 # axes[1].plot(training_labels[:,1], out[:,1], '.', label = 'mean')
-# x = np.linspace(-4,4)
+# x = np.linspace(-1,1)
 # axes[1].plot(x, x)
 # axes[1].legend()
-# axes[1].set_ylim(-4,4)
+# axes[1].set_ylim(-1,1)
 # axes[1].set_title('$e2$')
 
 # # axes[2].plot(y[:,2], out[:,2], '.', label = 'mean')

@@ -164,11 +164,16 @@ print('construction OK')
 model_choice = str(sys.argv[5])#'full_prob_flipout'
 # VAE with PSF input
 if model_choice == 'with_psf':#create_model_wo_ls_resnet #create_model_wo_ls_peak_3 #create_model_3D
-    net = model.create_model_wo_ls_peak_pooling_vae(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
+    net = model.create_model_wo_ls_peak_pooling_vae_3(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)  #create_model_wo_ls_peak_3
 # VAE without PSF input
 if model_choice == 'without_psf':
-    net = model.create_model_wo_ls_peak_pooling_vae_2(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+    net = model.create_model_wo_ls_peak_pooling_vae_4(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 net.summary()
+
+if (sys.argv[1] == 'noisy'):
+    # set the decoder as non trainable
+    for i in range (len(net.layers[45:])):
+        net.layers[45+i].trainable = False
 
 #### Loss definition
 model_loss = str(sys.argv[6])
