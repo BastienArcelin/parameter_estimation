@@ -45,130 +45,6 @@ bands = [0,1,2,3,4,5]
 
 saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/'+str(sys.argv[2])
 
-# With generator
-#images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
-images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'#1_matching/'#deconv_conv_24.5/
-#print(utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')))
-if (str(sys.argv[5]) == 'noiseless'):
-    print('in noiseless')
-    list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_noiseless_sample_')]#mag_24.5
-    list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_noiseless_sample_')]#mag_24.5
-    #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
-    training_generator = generator.BatchGenerator_dc2_deconv_2(bands,
-                                        images_dir,
-                                        list_of_samples, 
-                                        total_sample_size=None,
-                                        batch_size=batch_size, 
-                                        trainval_or_test='training',
-                                        do_norm=False,
-                                        denorm = False,
-                                        list_of_weights_e=None)
-
-    validation_generator = generator.BatchGenerator_dc2_deconv_2(bands,
-                                        images_dir,
-                                        list_of_samples_val, 
-                                        total_sample_size=None,
-                                        batch_size=batch_size, 
-                                        trainval_or_test='validation',
-                                        do_norm=False,
-                                        denorm = False,
-                                        list_of_weights_e=None)
-
-    test_generator = generator.BatchGenerator_dc2_deconv_2(bands, 
-                                        images_dir,
-                                        list_of_samples_val, 
-                                        total_sample_size=None,
-                                        batch_size=batch_size, 
-                                        trainval_or_test='validation',
-                                        do_norm=False,
-                                        denorm = False,
-                                        list_of_weights_e=None)
-
-else:
-    print('Noisy')
-    list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_cropped_sample_')]
-    list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_cropped_sample_')]
-    #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
-    print(list_of_samples)
-    training_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
-                                        images_dir,
-                                        list_of_samples, 
-                                        total_sample_size=None,
-                                        batch_size=batch_size, 
-                                        trainval_or_test='training',
-                                        do_norm=False,
-                                        denorm = False,
-                                        list_of_weights_e=None,
-                                        save_path = saving_path)
-
-    validation_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
-                                        images_dir,
-                                        list_of_samples_val, 
-                                        total_sample_size=None,
-                                        batch_size=batch_size, 
-                                        trainval_or_test='validation',
-                                        do_norm=False,
-                                        denorm = False,
-                                        list_of_weights_e=None,
-                                        save_path = saving_path)
-
-    test_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands, 
-                                        images_dir,
-                                        list_of_samples_val, 
-                                        total_sample_size=None,
-                                        batch_size=batch_size, 
-                                        trainval_or_test='validation',
-                                        do_norm=False,
-                                        denorm = False,
-                                        list_of_weights_e=None,
-                                        save_path = saving_path)
-
-
-# NEW: Wrap the generator.BatchGenerator objects in a generator-style function
-# which we can then pass to tf.data.Dataset.from_generator()
-# (One per train/val/test dataset at the moment, but could be refactored for neatness!)
-def training_batch_generator():
-    multi_enqueuer = keras.utils.OrderedEnqueuer(training_generator,
-                                                use_multiprocessing=False)
-    multi_enqueuer.start(workers=10, max_queue_size=10)
-    while True:
-        batch_x, batch_y = next(multi_enqueuer.get())
-        yield batch_x, batch_y
-
-def validation_batch_generator():
-    multi_enqueuer = keras.utils.OrderedEnqueuer(validation_generator,
-                                                    use_multiprocessing=False)
-    multi_enqueuer.start(workers=10, max_queue_size=10)
-    while True:
-        batch_x, batch_y = next(multi_enqueuer.get())
-        yield batch_x, batch_y
-
-def test_batch_generator():
-    multi_enqueuer = keras.utils.OrderedEnqueuer(test_generator,
-                                                    use_multiprocessing=False)
-    multi_enqueuer.start(workers=10, max_queue_size=10)
-    while True:
-        batch_x, batch_y = next(multi_enqueuer.get())
-        yield batch_x, batch_y
-
-# Recommended to specify the expected output shapes and types here
-output_types = ((tf.float32,tf.float32), tf.float32)
-output_shapes = ((tf.TensorShape([batch_size, 59, 59, nb_of_bands]),tf.TensorShape([batch_size, 59, 59, nb_of_bands])),
-                tf.TensorShape([batch_size, final_dim]))
-
-training_ds = tf.data.Dataset.from_generator(training_batch_generator,
-                                                output_types=output_types,
-                                                output_shapes=output_shapes).repeat()
-
-validation_ds = tf.data.Dataset.from_generator(validation_batch_generator,
-                                                output_types=output_types,
-                                                output_shapes=output_shapes).repeat()
-
-test_ds = tf.data.Dataset.from_generator(test_batch_generator,
-                                            output_types=output_types,
-                                            output_shapes=output_shapes).repeat()
-
-print('construction OK')
 
 #### Model definition
 
@@ -224,6 +100,140 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5),
               loss=negative_log_likelihood,
               metrics = ['mse', 'acc',kl_metric],
               experimental_run_tf_function=False)
+
+
+
+# Data generator
+#images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
+images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'#1_matching/'#deconv_conv_24.5/
+#print(utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')))
+if (str(sys.argv[5]) == 'noiseless'):
+    print('in noiseless')
+    list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_noiseless_sample_')]#mag_24.5
+    list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_noiseless_sample_')]#mag_24.5
+    #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
+    training_generator = generator.BatchGenerator_dc2_deconv_2(bands,
+                                        images_dir,
+                                        list_of_samples, 
+                                        total_sample_size=None,
+                                        batch_size=batch_size, 
+                                        trainval_or_test='training',
+                                        do_norm=False,
+                                        denorm = False,
+                                        list_of_weights_e=None)
+
+    validation_generator = generator.BatchGenerator_dc2_deconv_2(bands,
+                                        images_dir,
+                                        list_of_samples_val, 
+                                        total_sample_size=None,
+                                        batch_size=batch_size, 
+                                        trainval_or_test='validation',
+                                        do_norm=False,
+                                        denorm = False,
+                                        list_of_weights_e=None)
+
+    test_generator = generator.BatchGenerator_dc2_deconv_2(bands, 
+                                        images_dir,
+                                        list_of_samples_val, 
+                                        total_sample_size=None,
+                                        batch_size=batch_size, 
+                                        trainval_or_test='validation',
+                                        do_norm=False,
+                                        denorm = False,
+                                        list_of_weights_e=None)
+
+else:
+    print('Noisy')
+    list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_cropped_sample_')]
+    list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_cropped_sample_')]
+    #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
+    print(list_of_samples)
+    training_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
+                                        images_dir,
+                                        list_of_samples, 
+                                        total_sample_size=None,
+                                        batch_size=batch_size, 
+                                        trainval_or_test='training',
+                                        do_norm=False,
+                                        denorm = False,
+                                        list_of_weights_e=None,
+                                        net = net,
+                                        saving_path = saving_path,
+                                        prop = 0)
+
+    validation_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
+                                        images_dir,
+                                        list_of_samples_val, 
+                                        total_sample_size=None,
+                                        batch_size=batch_size, 
+                                        trainval_or_test='validation',
+                                        do_norm=False,
+                                        denorm = False,
+                                        list_of_weights_e=None,
+                                        net = net,
+                                        saving_path = saving_path,
+                                        prop = 0)
+
+    test_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands, 
+                                        images_dir,
+                                        list_of_samples_val, 
+                                        total_sample_size=None,
+                                        batch_size=batch_size, 
+                                        trainval_or_test='validation',
+                                        do_norm=False,
+                                        denorm = False,
+                                        list_of_weights_e=None,
+                                        net = net,
+                                        saving_path = saving_path,
+                                        prop = 0)
+
+
+# NEW: Wrap the generator.BatchGenerator objects in a generator-style function
+# which we can then pass to tf.data.Dataset.from_generator()
+# (One per train/val/test dataset at the moment, but could be refactored for neatness!)
+def training_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(training_generator,
+                                                use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+def validation_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(validation_generator,
+                                                    use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+def test_batch_generator():
+    multi_enqueuer = keras.utils.OrderedEnqueuer(test_generator,
+                                                    use_multiprocessing=False)
+    multi_enqueuer.start(workers=10, max_queue_size=10)
+    while True:
+        batch_x, batch_y = next(multi_enqueuer.get())
+        yield batch_x, batch_y
+
+# Recommended to specify the expected output shapes and types here
+output_types = ((tf.float32,tf.float32), tf.float32)
+output_shapes = ((tf.TensorShape([batch_size, 59, 59, nb_of_bands]),tf.TensorShape([batch_size, 59, 59, nb_of_bands])),
+                tf.TensorShape([batch_size, final_dim]))
+
+training_ds = tf.data.Dataset.from_generator(training_batch_generator,
+                                                output_types=output_types,
+                                                output_shapes=output_shapes).repeat()
+
+validation_ds = tf.data.Dataset.from_generator(validation_batch_generator,
+                                                output_types=output_types,
+                                                output_shapes=output_shapes).repeat()
+
+test_ds = tf.data.Dataset.from_generator(test_batch_generator,
+                                            output_types=output_types,
+                                            output_shapes=output_shapes).repeat()
+
+print('construction OK')
+
 
 
 if (str(sys.argv[3]) == 'loading'):
