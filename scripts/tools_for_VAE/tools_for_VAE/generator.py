@@ -281,9 +281,20 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
             
         if self.prop == 11:
             self.prop=10
-        list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training_24.5_v2/')) if x.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_noiseless_sample_')]
-        list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training_24.5_v2/')) if x.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_cropped_sample_')]
+
+        if self.trainval_or_test == 'training':
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training/')) if x.startswith(os.path.join(self.path,'training/')+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training/')) if x.startswith(os.path.join(self.path,'training/')+'img_cropped_sample_')]
         
+        if self.trainval_or_test == 'validation':
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'validation/')) if x.startswith(os.path.join(self.path,'validation/')+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'validation/')) if x.startswith(os.path.join(self.path,'validation/')+'img_cropped_sample_')]
+
+        if self.trainval_or_test == 'test':
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'test/')) if x.startswith(os.path.join(self.path,'test/')+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'test/')) if x.startswith(os.path.join(self.path,'test/')+'img_cropped_sample_')]
+
+
         list_of_samples_noiseless_chosen = np.random.choice(list_of_samples_noiseless, size = 10-self.prop)
         list_of_samples_noisy_chosen = np.random.choice(list_of_samples_noisy, size = self.prop)
 
@@ -316,8 +327,6 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
 
         ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(-ell_1, ell_2, shear_1, shear_2, convergence))
         ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(-ell_1, ell_2, shear_1, shear_2, convergence))
-        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
-        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
 
         data['ellipticity_1_lensed'] = ellipticity_1
         data['ellipticity_2_lensed'] = ellipticity_2

@@ -105,7 +105,7 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5),
 
 # Data generator
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
-images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'#1_matching/'#deconv_conv_24.5/
+images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/24.5/'#1_matching/'#deconv_conv_24.5/
 
 ## The difference between noiseless and noisy case depends on the size of the step for the increment of noisy data.
 if (str(sys.argv[5]) == None):
@@ -117,8 +117,8 @@ else:
     step_size = int(sys.argv[5])
 
 
-list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_cropped_sample_')]
-list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_cropped_sample_')]
+list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training/')) if x.startswith(os.path.join(images_dir,'training/')+'img_cropped_sample_')]
+list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation/')) if x.startswith(os.path.join(images_dir,'validation/')+'img_cropped_sample_')]
 #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
 print(list_of_samples)
 training_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
