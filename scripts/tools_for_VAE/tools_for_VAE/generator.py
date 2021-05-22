@@ -208,7 +208,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
     """
     Class to create batch generator for the LSST VAE.
     """
-    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e, net, saving_path, prop = 0):
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e, net, saving_path, prop = 0, step_size = 10000):
         """
         Initialization function
         total_sample_size: size of the whole training (or validation) sample
@@ -234,6 +234,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         self.denorm = denorm
         self.net = net
         self.saving_path = saving_path
+        self.step_size = step_size
 
         # Weights computed from the lengths of lists
         self.p = []
@@ -271,8 +272,8 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         """
         Function which returns the input and target batches for the network
         """
-        # Change the proportion of noisy data every 150 epochs:
-        if self.epoch == 150:
+        # Change the proportion of noisy data every step_size epochs:
+        if self.epoch == self.step_size:
             saving_path = self.saving_path+'/end_step/'
             self.net.save_weights(saving_path+'cp-'+str(self.epoch)+'.ckpt')
             self.prop +=1
@@ -327,7 +328,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
                         #(np.abs(data['blendedness'])==0.)]# &
         
         if self.list_of_weights_e == None:
-            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = None)#new_data['weights']/np.sum(new_data['weights']))
+            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
         else:
             self.weights_e = np.load(self.list_of_weights_e[index])
             indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
@@ -368,11 +369,6 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
             return (x_1, x_2), y
         elif self.trainval_or_test == 'test':
             return (x_1, x_2), y
-
-
-
-
-
 
 
 
@@ -491,142 +487,6 @@ class BatchGenerator_dc2_redshift(tensorflow.keras.utils.Sequence):
         elif self.trainval_or_test == 'test':
             return (x_1, x_2), y
 
-
-class BatchGenerator_dc2_one_input(tensorflow.keras.utils.Sequence):
-    """
-    Class to create batch generator for the LSST VAE.
-    """
-    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
-        """
-        Initialization function
-        total_sample_size: size of the whole training (or validation) sample
-        batch_size: size of the batches to provide
-        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
-#        path: path to the first numpy array taken in which the batch will be taken
-        training_or_validation: choice between training of validation generator
-        x: input of the neural network
-        y: target of the neural network
-        r: random value to sample into the validation sample
-        """
-        self.bands = bands
-        self.nbands = len(bands)
-        self.total_sample_size = total_sample_size
-        self.batch_size = batch_size
-        self.list_of_samples = list_of_samples
-        self.trainval_or_test = trainval_or_test
-        self.path = path
-        
-        self.epoch = 0
-        self.do_norm = do_norm
-        self.denorm = denorm
-
-        # Weights computed from the lengths of lists
-        self.p = []
-        for sample in self.list_of_samples:
-            temp = np.load(sample, mmap_mode = 'c')
-            self.p.append(float(len(temp)))
-        self.p = np.array(self.p)
-        self.total_sample_size = int(np.sum(self.p))
-        print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
-        print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
-
-        self.p /= np.sum(self.p)
-
-        self.produced_samples = 0
-        self.list_of_weights_e = list_of_weights_e
-        #self.shifts = shifts
-
-    def __len__(self):
-        """
-        Function to define the length of an epoch
-        """
-        return int(float(self.total_sample_size) / float(self.batch_size))      
-
-    def on_epoch_end(self):
-        """
-        Function executed at the end of each epoch
-        """
-        # indices = 0
-        #print("Produced samples", self.produced_samples)
-        self.produced_samples = 0
-        
-    def __getitem__(self, idx):
-        """
-        Function which returns the input and target batches for the network
-        """
-        # If the generator is a training generator, the whole sample is displayed
-        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
-
-        sample = np.load(sample_filename, mmap_mode = 'c')
-        data = pd.read_csv(sample_filename.replace('sample.npy','data.csv'))
-        psf = np.load(sample_filename.replace('img_sample.npy','psf_sample.npy'), mmap_mode = 'c')
-        #print(len(data['e1']))
-        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
-        new_data = data[(np.abs(data['e1'])<=1.) &
-                        (np.abs(data['e2'])<=1.)]# &
-                        #(data['snr_r']>20)]#snr_r
-                        #(np.abs(data['blendedness'])==0.)]# &
-        #print(len(new_data['e1']))
-        
-        if self.list_of_weights_e == None:
-            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
-        else:
-            self.weights_e = np.load(self.list_of_weights_e[index])
-            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
-
-        self.produced_samples += len(indices)
-        
-        ell_1 = np.array(new_data['e1'][indices])
-        ell_2 = np.array(new_data['e2'][indices])
-        shear_1 = np.array(new_data['shear_1'][indices])
-        shear_2 = np.array(new_data['shear_2'][indices])
-        convergence = np.array(new_data['convergence'][indices])
-        
-        ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
-        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
-
-        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
-        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
-        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
-        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
-
-        x = np.zeros((self.batch_size,59,59,12))
-        x[:,:,:,:6] = sample[indices][:,:,:,self.bands]#13866*
-        x[:,:,:,6:] = psf[indices][:,:,:,self.bands]
-        #x_1 = 13866*sample[indices][:,:,:,self.bands]
-        #x_2 = psf[indices][:,:,:,self.bands]
-        y = np.zeros((self.batch_size, 2))
-
-        #flip : flipping the image array
-        rand = np.random.randint(4)
-        if rand == 1: 
-            x = np.flip(x, axis=2)
-            #x_2 = np.flip(x_2, axis=2)
-            y[:,0] = -ellipticity_1
-            y[:,1] = -ellipticity_2
-        elif rand == 2:
-            x = np.swapaxes(x, 2, 1)
-            #x_2 = np.swapaxes(x_2, 2, 1)
-            y[:,0] = +ellipticity_1
-            y[:,1] = ellipticity_2
-        elif rand == 3:
-            x = np.swapaxes(np.flip(x, axis=2), 2, 1)
-            #x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
-            y[:,0] = +ellipticity_1
-            y[:,1] = -ellipticity_2
-        else:
-            y[:,0] = -ellipticity_1
-            y[:,1] = ellipticity_2
-        if len(self.bands)==1:
-            x = np.expand_dims(x, axis=-1)
-            #x_2 = np.expand_dims(x_2, axis=-1)
-
-        #print(x.shape)
-        #x_1 = np.arcsinh(x_1/0.01)
-        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
-            return x, y
-        elif self.trainval_or_test == 'test':
-            return x, y
 
 
 
