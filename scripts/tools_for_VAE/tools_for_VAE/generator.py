@@ -1108,7 +1108,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
     """
     Class to create batch generator for the LSST VAE.
     """
-    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
+    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e, net, saving_path):
         """
         Initialization function
         total_sample_size: size of the whole training (or validation) sample
@@ -1132,6 +1132,8 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         self.prop = 0
         self.do_norm = do_norm
         self.denorm = denorm
+        self.net = net
+        self.saving_path = saving_path
 
         # Weights computed from the lengths of lists
         self.p = []
@@ -1169,13 +1171,15 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         """
         Function which returns the input and target batches for the network
         """
-        # Change the proportion of noisy data every 80 epochs:
-        #while self.prop<9:
-        if self.epoch == 80:
+        # Change the proportion of noisy data every 150 epochs:
+        if self.epoch == 150:
+            saving_path = '/sps/lsst/users/barcelin/TFP/weights/'++'end_step/'
+            self.net.save_weights(saving_path+'cp-'+str(self.epoch)+'.ckpt')
             self.prop +=1
             self.epoch = 0
-        if self.prop == 10:
-            self.prop=9
+            
+        if self.prop == 11:
+            self.prop=10
         list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training_24.5_v2/')) if x.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_noiseless_sample_')]
         list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training_24.5_v2/')) if x.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_cropped_sample_')]
         
@@ -1197,7 +1201,6 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
             data = pd.read_csv(sample_filename.replace('img_noiseless_sample','img_noiseless_data').replace('.npy','.csv'))
             psf = np.load(sample_filename.replace('img_noiseless_sample','psf_cropped_sample'), mmap_mode = 'c')
            
-        #print(len(data['e1']))
         data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
 
 

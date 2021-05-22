@@ -43,6 +43,8 @@ validation_steps = int(20000/batch_size)
 
 bands = [0,1,2,3,4,5]
 
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/'+str(sys.argv[2])
+
 # With generator
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
 images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'#1_matching/'#deconv_conv_24.5/
@@ -96,7 +98,8 @@ else:
                                         trainval_or_test='training',
                                         do_norm=False,
                                         denorm = False,
-                                        list_of_weights_e=None)
+                                        list_of_weights_e=None,
+                                        save_path = saving_path)
 
     validation_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
                                         images_dir,
@@ -106,7 +109,8 @@ else:
                                         trainval_or_test='validation',
                                         do_norm=False,
                                         denorm = False,
-                                        list_of_weights_e=None)
+                                        list_of_weights_e=None,
+                                        save_path = saving_path)
 
     test_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands, 
                                         images_dir,
@@ -116,7 +120,8 @@ else:
                                         trainval_or_test='validation',
                                         do_norm=False,
                                         denorm = False,
-                                        list_of_weights_e=None)
+                                        list_of_weights_e=None,
+                                        save_path = saving_path)
 
 
 # NEW: Wrap the generator.BatchGenerator objects in a generator-style function
@@ -203,23 +208,7 @@ if model_choice == 'full_prob_rt' or model_choice == 'full_prob_flipout':
     negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)+ kl *(K.get_value(alpha)-1)
 
 else:
-    #@tf.function
-    def mean_pred(y_true, y_pred):
-        mse = tf.keras.losses.MeanSquaredError()
-        mae = tf.keras.losses.MeanAbsoluteError()
-        msle = tf.keras.losses.MeanSquaredLogarithmicError()
-        r = int(batch_size/4)
-        return (msle(4*y_true[:r,0], y_pred.mean()[:r,0]-y_pred.mean()[r:2*r,0]-y_pred.mean()[2*r:3*r,0]+y_pred.mean()[3*r:4*r,0]) + 
-        msle(4*y_true[:r,1], -y_pred.mean()[:r,1]+y_pred.mean()[r:2*r,1]-y_pred.mean()[2*r:3*r,1]+y_pred.mean()[3*r:4*r,1])) #+ 
-        # mae(y_pred.mean()[:r,0], -y_pred.mean()[r:2*r,0]) + mae(-y_pred.mean()[2*r:3*r,0],y_pred.mean()[3*r:4*r,0]) +
-        # mae(y_pred.mean()[:r,0], -y_pred.mean()[2*r:3*r,0]) + mae(-y_pred.mean()[2*r:3*r,0],-y_pred.mean()[1*r:2*r,0])+
-        # mae(y_pred.mean()[:r,0], y_pred.mean()[3*r:4*r,0]) + mae(-y_pred.mean()[1*r:2*r,0],y_pred.mean()[3*r:4*r,0]) + 
-        # mae(y_pred.mean()[:r,1], -y_pred.mean()[r:2*r,1]) + mae(-y_pred.mean()[2*r:3*r,1],y_pred.mean()[3*r:4*r,1]) +
-        # mae(y_pred.mean()[:r,1], -y_pred.mean()[2*r:3*r,1]) + mae(-y_pred.mean()[2*r:3*r,1],-y_pred.mean()[1*r:2*r,1])+
-        # mae(y_pred.mean()[:r,1], y_pred.mean()[3*r:4*r,1]) + mae(-y_pred.mean()[1*r:2*r,1],y_pred.mean()[3*r:4*r,1])) #+
-        #K.abs(K.sum(y_pred.mean()[:,0])) + K.abs(K.sum(y_pred.mean()[:,1])))
-
-    negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)# + 1.*mean_pred(x,rv_x)
+    negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)
 
 
 # Custom metrics
@@ -246,7 +235,6 @@ if (str(sys.argv[3]) == 'loading'):
 
 
 # Callbacks
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/'+str(sys.argv[2])
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
 #checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
@@ -258,7 +246,7 @@ callbacks = [checkpointer_mse, checkpointer_loss]#, checkpointer_acc]#, alpha_ch
 
 ######## Train the network
 ## With dataset (faster than directly from generator)
-hist = net.fit(training_generator, epochs=1000,#training_ds
+hist = net.fit(training_generator, epochs=2000,#training_ds
                     steps_per_epoch=steps_per_epoch,
                     verbose=2,
                     shuffle=True,
@@ -266,7 +254,6 @@ hist = net.fit(training_generator, epochs=1000,#training_ds
                     validation_data=validation_generator,#validation_ds
                     validation_steps=validation_steps)
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/'+str(sys.argv[2])
 net.save_weights(saving_path+'cp-{epoch:04d}.ckpt')
 
 #### Plots
