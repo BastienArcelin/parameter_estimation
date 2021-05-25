@@ -48,160 +48,6 @@ def calc_lensed_ellipticity(es1, es2, gamma1, gamma2, kappa):
 
 
 
-class BatchGenerator_dc2_deconv_2(tensorflow.keras.utils.Sequence):
-    """
-    Class to create batch generator for the LSST VAE.
-    """
-    def __init__(self, bands,path, list_of_samples,total_sample_size, batch_size, trainval_or_test, do_norm,denorm, list_of_weights_e):
-        """
-        Initialization function
-        total_sample_size: size of the whole training (or validation) sample
-        batch_size: size of the batches to provide
-        list_of_samples: list of the numpy arrays which correspond to the whole training (or validation) sample
-#        path: path to the first numpy array taken in which the batch will be taken
-        training_or_validation: choice between training of validation generator
-        x: input of the neural network
-        y: target of the neural network
-        r: random value to sample into the validation sample
-        """
-        self.bands = bands
-        self.nbands = len(bands)
-        self.total_sample_size = total_sample_size
-        self.batch_size = batch_size
-        self.list_of_samples = list_of_samples
-        self.trainval_or_test = trainval_or_test
-        self.path = path
-        
-        self.epoch = 0
-        self.do_norm = do_norm
-        self.denorm = denorm
-
-        # Weights computed from the lengths of lists
-        self.p = []
-        for sample in self.list_of_samples:
-            temp = np.load(sample, mmap_mode = 'c')
-            self.p.append(float(len(temp)))
-        self.p = np.array(self.p)
-        self.total_sample_size = int(np.sum(self.p))
-        #print("[BatchGenerator] total_sample_size = ", self.total_sample_size)
-        #print("[BatchGenerator] len(list_of_samples) = ", len(self.list_of_samples))
-
-        self.p /= np.sum(self.p)
-
-        self.produced_samples = 0
-        self.list_of_weights_e = list_of_weights_e
-        #self.shifts = shifts
-
-    def __len__(self):
-        """
-        Function to define the length of an epoch
-        """
-        return int(float(self.total_sample_size) / float(self.batch_size))      
-
-    def on_epoch_end(self):
-        """
-        Function executed at the end of each epoch
-        """
-        # indices = 0
-        #print("Produced samples", self.produced_samples)
-        self.produced_samples = 0
-        
-    def __getitem__(self, idx):
-        """
-        Function which returns the input and target batches for the network
-        """
-        # If the generator is a training generator, the whole sample is displayed
-        sample_filename = np.random.choice(self.list_of_samples, p=self.p)
-        #index = np.random.choice(1)
-        #index = np.random.choice(list(range(len(self.p))), p=self.p)
-        #sample_filename = self.list_of_samples[index]
-
-        sample = np.load(sample_filename, mmap_mode = 'c')
-        data = pd.read_csv(sample_filename.replace('img_noiseless_sample','img_noiseless_data').replace('.npy','.csv'))
-        psf = np.load(sample_filename.replace('img_noiseless_sample','psf_cropped_sample'), mmap_mode = 'c')
-        #print(len(data['e1']))
-        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))
-
-        ell_1 = np.array(data['e1'])
-        ell_2 = np.array(data['e2'])
-        shear_1 = np.array(data['shear_1'])
-        shear_2 = np.array(data['shear_2'])
-        convergence = np.array(data['convergence'])
-        
-        ellipticity = calc_lensed_ellipticity(-ell_1, ell_2, shear_1, shear_2, convergence)
-        ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
-
-        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(-ell_1, ell_2, shear_1, shear_2, convergence))
-        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(-ell_1, ell_2, shear_1, shear_2, convergence))
-        #ellipticity_1 = calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence)
-        #ellipticity_2 = calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence)
-
-        data['ellipticity_1_lensed'] = ellipticity_1
-        data['ellipticity_2_lensed'] = ellipticity_2
-
-        new_data = data#[(np.abs(data['ellipticity_1_lensed'])<=1.) &
-        #                (np.abs(data['ellipticity_2_lensed'])<=1.)]
-                        #(np.abs(data['ellipticity_1_lensed'])<=0.5) &
-                        #(np.abs(data['ellipticity_2_lensed'])<=0.5)]
-                        #(data['snr_r']>20)]#snr_r
-                        #(np.abs(data['blendedness'])==0.)]# &
-        #print(len(new_data['e1']))
-        
-        if self.list_of_weights_e == None:
-            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = new_data['weights']/np.sum(new_data['weights']))
-        else:
-            self.weights_e = np.load(self.list_of_weights_e[index])
-            indices = np.random.choice(new_data.index, size=self.batch_size, replace=False, p = self.weights_e/np.sum(self.weights_e))
-
-        self.produced_samples += len(indices)
-        
-        x_1 = sample[indices][:,:,:,self.bands]
-        x_2 = psf[indices][:,:,:,self.bands]
-        y = np.zeros((self.batch_size, 2))
-        ellipticity_1 = new_data['ellipticity_1_lensed'][indices]
-        ellipticity_2 = new_data['ellipticity_2_lensed'][indices]
-
-        #flip : flipping the image array
-        rand = np.random.randint(4)
-        if rand == 1: 
-            x_1 = np.flip(x_1, axis=2)
-            x_2 = np.flip(x_2, axis=2)
-            #y[:,2] = new_data['redshift'][indices]
-            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1 # sign changed
-            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
-            y[:,0] = -ellipticity_1
-            y[:,1] = -ellipticity_2
-        elif rand == 2:
-            x_1 = np.swapaxes(x_1, 2, 1)
-            x_2 = np.swapaxes(x_2, 2, 1)
-            #y[:,2] = new_data['redshift'][indices]         
-            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
-            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
-            y[:,0] = ellipticity_1
-            y[:,1] = ellipticity_2
-        elif rand == 3:
-            x_1 = np.swapaxes(np.flip(x_1, axis=2), 2, 1)
-            x_2 = np.swapaxes(np.flip(x_2, axis=2), 2, 1)
-            #y[:,2] = new_data['redshift'][indices]
-            #y[:,0] = -quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
-            #y[:,1] = -quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
-            y[:,0] = ellipticity_1
-            y[:,1] = -ellipticity_2
-        else:
-            #y[:,2] = new_data['redshift'][indices]
-            #y[:,0] = quantile_transformer_1.transform(ellipticity_1.reshape(-1, 1))[:,0]#ellipticity_1
-            #y[:,1] = quantile_transformer_2.transform(ellipticity_2.reshape(-1, 1))[:,0]#ellipticity_2
-            y[:,0] = -ellipticity_1
-            y[:,1] = ellipticity_2
-        if len(self.bands)==1:
-            x_1 = np.expand_dims(x_1, axis=-1)
-            x_2 = np.expand_dims(x_2, axis=-1)
-
-        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
-            return (x_1, x_2), y
-        elif self.trainval_or_test == 'test':
-            return (x_1, x_2), y
-
 
 
 class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
@@ -228,7 +74,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         self.trainval_or_test = trainval_or_test
         self.path = path
         
-        self.epoch = 1
+        self.epoch = 0
         self.prop = prop
         self.do_norm = do_norm
         self.denorm = denorm
@@ -267,6 +113,10 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         self.epoch +=1 
         #print(self.epoch)
         self.produced_samples = 0
+        #if self.epoch == self.step_size:
+        #    print('end of epoch')
+        #    saving_path = self.saving_path+'/end_step/'
+        #    self.net.save_weights(saving_path+'cp-'+str(self.epoch)+'.ckpt')
         
     def __getitem__(self, idx):
         """
@@ -274,8 +124,6 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         """
         # Change the proportion of noisy data every step_size epochs:
         if self.epoch == self.step_size:
-            saving_path = self.saving_path+'/end_step/'
-            self.net.save_weights(saving_path+'cp-'+str(self.epoch)+'.ckpt')
             self.prop +=1
             self.epoch = 0
             
@@ -283,16 +131,21 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
             self.prop=10
 
         if self.trainval_or_test == 'training':
-            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training/')) if x.startswith(os.path.join(self.path,'training/')+'img_noiseless_sample_')]
-            list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'training/')) if x.startswith(os.path.join(self.path,'training/')+'img_cropped_sample_')]
+            #print('training')
+            data_path = os.path.join(self.path,'training/')
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')]
         
         if self.trainval_or_test == 'validation':
-            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'validation/')) if x.startswith(os.path.join(self.path,'validation/')+'img_noiseless_sample_')]
-            list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'validation/')) if x.startswith(os.path.join(self.path,'validation/')+'img_cropped_sample_')]
+            #print('validation')
+            data_path = os.path.join(self.path,'validation/')
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')]
 
         if self.trainval_or_test == 'test':
-            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(os.path.join(self.path,'test/')) if x.startswith(os.path.join(self.path,'test/')+'img_noiseless_sample_')]
-            list_of_samples_noisy = [x for x in utils.listdir_fullpath(os.path.join(self.path,'test/')) if x.startswith(os.path.join(self.path,'test/')+'img_cropped_sample_')]
+            data_path = os.path.join(self.path,'test/')
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')]
 
 
         list_of_samples_noiseless_chosen = np.random.choice(list_of_samples_noiseless, size = 10-self.prop)
@@ -300,11 +153,11 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
 
         list_of_samples_used = [*list_of_samples_noiseless_chosen, *list_of_samples_noisy_chosen]
 
-        sample_filename = np.random.choice(list_of_samples_used, size = 1)[0]#, p=self.p)
+        sample_filename = np.random.choice(list_of_samples_used, size = 1)[0]
         sample = np.load(sample_filename, mmap_mode = 'c')
         #print(sample_filename)
         
-        if sample_filename.startswith(os.path.join(self.path,'training_24.5_v2/')+'img_cropped_sample_')==True:
+        if sample_filename.startswith(data_path+'img_cropped_sample_')==True:
             #print('first')
             data = pd.read_csv(sample_filename.replace('img_cropped_sample','img_noiseless_data').replace('.npy','.csv'))
             psf = np.load(sample_filename.replace('img_cropped_sample','psf_cropped_sample'), mmap_mode = 'c')
@@ -374,10 +227,8 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
             x_1 = np.expand_dims(x_1, axis=-1)
             x_2 = np.expand_dims(x_2, axis=-1)
 
-        if self.trainval_or_test == 'training' or self.trainval_or_test == 'validation':
-            return (x_1, x_2), y
-        elif self.trainval_or_test == 'test':
-            return (x_1, x_2), y
+        
+        return (x_1, x_2), y
 
 
 

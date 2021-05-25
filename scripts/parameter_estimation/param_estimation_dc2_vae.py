@@ -45,10 +45,10 @@ bands = [0,1,2,3,4,5]
 
 # With generator
 #images_dir = '/sps/lsst/users/barcelin/data/TFP/GalSim_COSMOS/blended_galaxies/random/'
-images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/'#1_matching/'#deconv_conv_24.5/
+images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/24.5/'#1_matching/'#deconv_conv_24.5/
 
-list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training_24.5_v2/')) if x.startswith(os.path.join(images_dir,'training_24.5_v2/')+'img_noiseless_sample')]#mag_24.5
-list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation_24.5_v2/')) if x.startswith(os.path.join(images_dir,'validation_24.5_v2/')+'img_noiseless_sample')]#mag_24.5
+list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training/')) if x.startswith(os.path.join(images_dir,'training/')+'img_noiseless_sample')]#mag_24.5
+list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation/')) if x.startswith(os.path.join(images_dir,'validation/')+'img_noiseless_sample')]#mag_24.5
 
 if (sys.argv[1] == 'noiseless'):
     ################# With generators

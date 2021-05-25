@@ -25,63 +25,6 @@ tfd = tfp.distributions
 sys.path.insert(0,'../../scripts/tools_for_VAE/')
 from tools_for_VAE import ktied_distribution
 
-
-def create_model_old(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    tfd = tfp.distributions
-    prior = tfd.Independent(tfd.Normal(loc=tf.zeros(latent_dim), scale=1),
-                            reinterpreted_batch_ndims=1)
-
-    input_layer = Input(shape=(input_shape)) 
-
-    # Encoding part
-    h = BatchNormalization()(input_layer)
-    for i in range(len(filters)):
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
-        h = PReLU()(h)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
-        h = PReLU()(h)
-    h = Flatten()(h)
-    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(latent_dim),
-                activation=None)(h)
-    h = tfp.layers.MultivariateNormalTriL(
-            latent_dim,
-            activity_regularizer=tfp.layers.KLDivergenceRegularizer(prior, weight=0.01))(h)
-
-    # Decoding part
-    h = Flatten()(h)
-    h = tf.keras.layers.Dense(64, activation=None)(h) # 512
-    h = tf.keras.layers.PReLU()(h)
-
-    # Multivariate gaussian
-    h = tf.keras.layers.Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(h) #'relu'
-    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
-
-    model = Model(input_layer,h)
-
-    return model
-
-def create_model_wo_ls(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    input_layer = Input(shape=(input_shape)) 
-    
-    # Encoding part
-    h = BatchNormalization()(input_layer)
-    for i in range(len(filters)):
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same')(h)
-        h = PReLU()(h)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=conv_activation, padding='same', strides=(2,2))(h)
-        h = PReLU()(h)
-    h = Flatten()(h)
-
-    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-                activation=None)(h)
-    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
-
-    model = Model(input_layer,h)
-
-    return model
-
-
-
 # Probabilistic models
 
 import tensorflow.compat.v1 as tf1
@@ -205,11 +148,12 @@ def create_model_wo_ls_peak_inv(input_shape, latent_dim, hidden_dim, filters, ke
 
 
 
-def create_model_wo_ls_peak_pooling(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+def create_model_wo_ls_peak_pooling_dense(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     input_layer_1 = Input(shape=(input_shape)) 
     input_layer_2 = Input(shape=(input_shape)) 
 
     h = BatchNormalization()(input_layer_1)
+    #h = input_layer_1
     h_2 = input_layer_2
     for i in range(len(filters)):
         h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
@@ -223,18 +167,23 @@ def create_model_wo_ls_peak_pooling(input_shape, latent_dim, hidden_dim, filters
         h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
         h_2 = PReLU()(h_2)
 
-        h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
+        #h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
 
-    #h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
-    h = Flatten()(h)
+    h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
+    h = Flatten()(tf.cast(h,tf.float64))
+    h = Dense(hidden_dim, activation = 'tanh')(h)
     #h = PReLU()(h)
-    #h = Dense(256)(h)
+    h = Dense(hidden_dim, activation = 'tanh')(h)
+    #h = PReLU()(h)
+    h = Dense(hidden_dim)(h)
     h = PReLU()(h)
-    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
-                activation=None)(tf.cast(h,tf.float64))
+    h = Dense(int(hidden_dim/2))(h)
+    h = PReLU()(h)
+
+    h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(tf.cast(h,tf.float32))
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
     model = Model([input_layer_1, input_layer_2],h)
-
     return model
 
 
@@ -272,6 +221,48 @@ def create_model_wo_ls_peak_pooling_concat_one(input_shape, latent_dim, hidden_d
     #h = PReLU()(h)
     #h = Dense(encoded_size)(h)
     h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(tf.cast(h,tf.float32))
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+
+def create_model_cyrille(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+
+    h = BatchNormalization()(input_layer_1)
+    h_2 = input_layer_2
+    for i in range(len(filters)):
+        l1 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', use_bias=False)
+        h = l1(h)
+        h_2 = l1(h_2)
+
+        h = PReLU()(h)
+        h_2 = PReLU()(h_2)
+
+        h = MaxPool2D()(h)
+        h_2 = MaxPool2D()(h_2)
+
+        l2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', use_bias=False)
+        h = l2(h)
+        h_2 = l2(h_2)
+
+        h = PReLU()(h)
+        h_2 = PReLU()(h_2)
+
+    h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
+
+    h = Flatten()(tf.cast(h,tf.float64))
+    h = Dense(hidden_dim)(h)#, activation = 'tanh'
+    h = PReLU()(h)
+    h = Dense(hidden_dim)(h)#, activation = 'tanh'
+    h = PReLU()(h)
+    h = Dense(hidden_dim)(h)
+    h = PReLU()(h)
+   # h = Dense(int(hidden_dim/2))(h) #
+   # h = PReLU()(h) #
     h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(tf.cast(h,tf.float32))
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
     model = Model([input_layer_1, input_layer_2],h)

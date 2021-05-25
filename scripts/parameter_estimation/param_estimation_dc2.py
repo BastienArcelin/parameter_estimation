@@ -26,7 +26,7 @@ from wandb.keras import WandbCallback
 #wandb.init()
 ######## Parameters
 nb_of_bands = 6#1
-batch_size = 512
+batch_size = 16
 
 input_shape = (59, 59, nb_of_bands)
 hidden_dim = 256
@@ -65,6 +65,8 @@ if model_choice == 'wo_ls_concat_one':
     #net = model.create_model_shear(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 if model_choice == 'full_prob_flipout':
     net = model.create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+if model_choice == 'cyrille':
+    net = model.create_model_cyrille(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 
 net.summary()
 #net.layers[-1].trainable = False
@@ -108,13 +110,14 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5),
 images_dir = '/pbs/home/b/barcelin/sps_link/data/dc2_test/24.5/'#1_matching/'#deconv_conv_24.5/
 
 ## The difference between noiseless and noisy case depends on the size of the step for the increment of noisy data.
-if (str(sys.argv[5]) == None):
+if (int(sys.argv[5]) == None):
     print('in noiseless')
     step_size = 10000
 
 else:
     print('Noisy')
     step_size = int(sys.argv[5])
+    print(step_size)
 
 
 list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'training/')) if x.startswith(os.path.join(images_dir,'training/')+'img_cropped_sample_')]
@@ -164,50 +167,6 @@ test_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
                                     step_size = step_size)
 
 
-# NEW: Wrap the generator.BatchGenerator objects in a generator-style function
-# which we can then pass to tf.data.Dataset.from_generator()
-# (One per train/val/test dataset at the moment, but could be refactored for neatness!)
-def training_batch_generator():
-    multi_enqueuer = keras.utils.OrderedEnqueuer(training_generator,
-                                                use_multiprocessing=False)
-    multi_enqueuer.start(workers=10, max_queue_size=10)
-    while True:
-        batch_x, batch_y = next(multi_enqueuer.get())
-        yield batch_x, batch_y
-
-def validation_batch_generator():
-    multi_enqueuer = keras.utils.OrderedEnqueuer(validation_generator,
-                                                    use_multiprocessing=False)
-    multi_enqueuer.start(workers=10, max_queue_size=10)
-    while True:
-        batch_x, batch_y = next(multi_enqueuer.get())
-        yield batch_x, batch_y
-
-def test_batch_generator():
-    multi_enqueuer = keras.utils.OrderedEnqueuer(test_generator,
-                                                    use_multiprocessing=False)
-    multi_enqueuer.start(workers=10, max_queue_size=10)
-    while True:
-        batch_x, batch_y = next(multi_enqueuer.get())
-        yield batch_x, batch_y
-
-# Recommended to specify the expected output shapes and types here
-output_types = ((tf.float32,tf.float32), tf.float32)
-output_shapes = ((tf.TensorShape([batch_size, 59, 59, nb_of_bands]),tf.TensorShape([batch_size, 59, 59, nb_of_bands])),
-                tf.TensorShape([batch_size, final_dim]))
-
-training_ds = tf.data.Dataset.from_generator(training_batch_generator,
-                                                output_types=output_types,
-                                                output_shapes=output_shapes).repeat()
-
-validation_ds = tf.data.Dataset.from_generator(validation_batch_generator,
-                                                output_types=output_types,
-                                                output_shapes=output_shapes).repeat()
-
-test_ds = tf.data.Dataset.from_generator(test_batch_generator,
-                                            output_types=output_types,
-                                            output_shapes=output_shapes).repeat()
-
 print('construction OK')
 
 
@@ -223,13 +182,36 @@ if (str(sys.argv[3]) == 'loading'):
 # Callbacks
 checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mean_squared_error:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
-#checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
+checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
 
 alpha_changer = changeAlpha(alpha, net,negative_log_likelihood, kl_metric)
 
-callbacks = [checkpointer_mse, checkpointer_loss]#, checkpointer_acc]#, alpha_changer]#, alpha_changer]#, WandbCallback()]#, alpha_changer]
+from tensorflow.keras.callbacks import Callback
+#print(saving_path)
+class save_model_step(Callback):
+    def __init__(self, network, save_path, step_siz):
+        self.epoch = 0
+        self.step_siz = step_siz
+        self.save_path = save_path
+        self.save_path = str(self.save_path)+'/end_step/'
+        self.network = network
+    
+    def on_epoch_end(self, network, save_path):
+        #print(self.step_siz)
+        print(self.save_path)
+        if (self.epoch == self.step_siz):
+            self.epoch =0
+            self.network.save_weights(self.save_path+'cp-'+str(self.epoch)+'.ckpt')
+        self.epoch +=1
+        #print(self.epoch)
+
+cb = save_model_step(net, saving_path, step_size)
+
+callbacks = [checkpointer_mse, checkpointer_loss,checkpointer_acc, cb]#, checkpointer_acc]#, alpha_changer]#, alpha_changer]#, WandbCallback()]#, alpha_changer]
 
 
+#print(saving_path)
+#print('debut entrainement')
 ######## Train the network
 ## With dataset (faster than directly from generator)
 hist = net.fit(training_generator, epochs=2000,#training_ds
