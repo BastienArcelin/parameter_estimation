@@ -26,7 +26,7 @@ from wandb.keras import WandbCallback
 #wandb.init()
 ######## Parameters
 nb_of_bands = 6#1
-batch_size = 16
+batch_size = 512
 
 input_shape = (59, 59, nb_of_bands)
 hidden_dim = 256
@@ -67,6 +67,8 @@ if model_choice == 'full_prob_flipout':
     net = model.create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 if model_choice == 'cyrille':
     net = model.create_model_cyrille(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+if model_choice == 'no_psf_dense':
+    net = model.create_model_no_psf_dense(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 
 net.summary()
 #net.layers[-1].trainable = False

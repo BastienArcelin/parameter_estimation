@@ -187,7 +187,35 @@ def create_model_wo_ls_peak_pooling_dense(input_shape, latent_dim, hidden_dim, f
     return model
 
 
+def create_model_no_psf_dense(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
 
+    h = BatchNormalization()(input_layer_1)
+    #h = input_layer_1
+    h_2 = input_layer_2
+    for i in range(len(filters)):
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+        h = MaxPool2D()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+ 
+    h = Flatten()(tf.cast(h,tf.float64))
+    h = Dense(hidden_dim, activation = 'tanh')(h)
+    #h = PReLU()(h)
+    h = Dense(hidden_dim, activation = 'tanh')(h)
+    #h = PReLU()(h)
+    h = Dense(hidden_dim)(h)
+    h = PReLU()(h)
+    h = Dense(int(hidden_dim/2))(h)
+    h = PReLU()(h)
+
+    h = PReLU()(h)
+    h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(tf.cast(h,tf.float32))
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+    model = Model([input_layer_1, input_layer_2],h)
+    return model
 
 encoded_size = 10
 prior = tfd.Independent(tfd.Normal(loc=tf.zeros(encoded_size), scale=1),
@@ -255,55 +283,20 @@ def create_model_cyrille(input_shape, latent_dim, hidden_dim, filters, kernels, 
     h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
 
     h = Flatten()(tf.cast(h,tf.float64))
-    h = Dense(hidden_dim)(h)#, activation = 'tanh'
-    h = PReLU()(h)
-    h = Dense(hidden_dim)(h)#, activation = 'tanh'
-    h = PReLU()(h)
+    h = Dense(hidden_dim, activation = 'tanh')(h)#, activation = 'tanh'
+    #h = PReLU()(h)
+    h = Dense(hidden_dim, activation = 'tanh')(h)#, activation = 'tanh'
+    #h = PReLU()(h)
     h = Dense(hidden_dim)(h)
     h = PReLU()(h)
-   # h = Dense(int(hidden_dim/2))(h) #
-   # h = PReLU()(h) #
+    h = Dense(int(hidden_dim/2))(h) #
+    h = PReLU()(h) #
     h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(tf.cast(h,tf.float32))
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
     model = Model([input_layer_1, input_layer_2],h)
 
     return model
 
-
-def create_model_wo_ls_peak_pooling_concat_one_dense(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
-    input_layer_1 = Input(shape=(input_shape)) 
-    input_layer_2 = Input(shape=(input_shape)) 
-
-    h = BatchNormalization()(input_layer_1)
-    #h = input_layer_1
-    h_2 = input_layer_2
-    for i in range(len(filters)):
-        h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
-        h_2 = PReLU()(h_2)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
-        h = PReLU()(h)
-        if i == 2:
-            h = h
-            h = h_2
-        else:
-            h = MaxPool2D()(h)
-            h_2 = MaxPool2D()(h_2)
-        #h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
-        #h = PReLU()(h)
-        #h_2 = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h_2)
-        #h_2 = PReLU()(h_2)
-    h = Flatten()(tf.cast(h,tf.float64))
-    h_2 = Flatten()(tf.cast(h_2,tf.float64))
-    h = tf.keras.layers.concatenate([tf.cast(h,tf.float64), tf.cast(h_2,tf.float64)], axis =-1)
-    
-    h = PReLU()(h)
-    h = Dense(256)(h)#tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(tf.cast(h,tf.float32))
-    h = PReLU()(h)
-    #h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
-    h = Dense(2)(h)
-    model = Model([input_layer_1, input_layer_2],h)
-
-    return model
 
 
 

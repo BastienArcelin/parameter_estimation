@@ -275,18 +275,18 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
 
         if self.trainval_or_test == 'training':
             data_path = os.path.join(self.path,'training/')
-            list_of_samples_noiseless = [[x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')][0]]
-            list_of_samples_noisy = [[x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')][0]]
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')]
         
         if self.trainval_or_test == 'validation':
             data_path = os.path.join(self.path,'validation/')
-            list_of_samples_noiseless = [[x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')][0]]
-            list_of_samples_noisy = [[x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')][0]]
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')]
 
         if self.trainval_or_test == 'test':
             data_path = os.path.join(self.path,'test/')
-            list_of_samples_noiseless = [[x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')][0]]
-            list_of_samples_noisy = [[x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')][0]]
+            list_of_samples_noiseless = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_noiseless_sample_')]
+            list_of_samples_noisy = [x for x in utils.listdir_fullpath(data_path) if x.startswith(data_path+'img_cropped_sample_')]
 
 
         list_of_samples_noiseless_chosen = np.random.choice(list_of_samples_noiseless, size = 10-self.prop)
