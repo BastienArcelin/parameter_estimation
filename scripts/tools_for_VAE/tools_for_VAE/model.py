@@ -27,13 +27,13 @@ from tools_for_VAE import ktied_distribution
 
 # Probabilistic models
 
-import tensorflow.compat.v1 as tf1
+#import tensorflow.compat.v1 as tf1
 from tensorflow_probability.python.layers import util as tfp_layers_util
 # Weights initialization for posteriors
 def get_posterior_fn():
   return tfp_layers_util.default_mean_field_normal_fn(
-      loc_initializer=tf1.initializers.he_normal(), 
-      untransformed_scale_initializer=tf1.initializers.random_normal(
+      loc_initializer=tf.keras.initializers.Henormal(), 
+      untransformed_scale_initializer=tf.keras.initializers.RandomNormal(
           mean=-9, stddev=0.1)#mean=-9, stddev=0.1)
       )
 # kernel divergence weight in loss
@@ -195,10 +195,10 @@ def create_model_no_psf_dense(input_shape, latent_dim, hidden_dim, filters, kern
     #h = input_layer_1
     h_2 = input_layer_2
     for i in range(len(filters)):
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', use_bias=False)(h)
         h = PReLU()(h)
         h = MaxPool2D()(h)
-        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', use_bias=False)(h)
         h = PReLU()(h)
  
     h = Flatten()(tf.cast(h,tf.float64))
@@ -577,13 +577,13 @@ def create_model_wo_ls_peak_2(input_shape, latent_dim, hidden_dim, filters, kern
 
 
 
-import tensorflow.compat.v1 as tf1
+#import tensorflow.compat.v1 as tf1
 from tensorflow_probability.python.layers import util as tfp_layers_util
 # Weights initialization for posteriors
 def get_posterior_fn():
   return tfp_layers_util.default_mean_field_normal_fn(
-      loc_initializer=tf1.initializers.he_normal(), 
-      untransformed_scale_initializer=tf1.initializers.random_normal(
+      loc_initializer=tf.keras.initializers.HeNormal(), 
+      untransformed_scale_initializer=tf.keras.initializers.RandomNormal(
           mean=-9, stddev=0.1)#mean=-9, stddev=0.1)
       )
 # kernel divergence weight in loss

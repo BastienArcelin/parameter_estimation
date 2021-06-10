@@ -126,7 +126,7 @@ list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'tr
 list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation/')) if x.startswith(os.path.join(images_dir,'validation/')+'img_cropped_sample_')]
 #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
 print(list_of_samples)
-training_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
+training_generator = generator.BatchGenerator_dc2_deconvolution(bands,#BatchGenerator_dc2_deconv_noisy_2
                                     images_dir,
                                     list_of_samples, 
                                     total_sample_size=None,
@@ -140,7 +140,7 @@ training_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
                                     prop = 0,
                                     step_size = step_size)
 
-validation_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
+validation_generator = generator.BatchGenerator_dc2_deconvolution(bands,#BatchGenerator_dc2_reconvolution
                                     images_dir,
                                     list_of_samples_val, 
                                     total_sample_size=None,
@@ -154,7 +154,7 @@ validation_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands,
                                     prop = 0,
                                     step_size = step_size)
 
-test_generator = generator.BatchGenerator_dc2_deconv_noisy_2(bands, 
+test_generator = generator.BatchGenerator_dc2_deconvolution(bands, #BatchGenerator_dc2_reconvolution
                                     images_dir,
                                     list_of_samples_val, 
                                     total_sample_size=None,

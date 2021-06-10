@@ -26,7 +26,7 @@ from wandb.keras import WandbCallback
 #wandb.init()
 ######## Parameters
 nb_of_bands = 6#1
-batch_size = 256
+batch_size = 100
 
 input_shape = (59, 59, nb_of_bands)
 hidden_dim = 256
@@ -199,7 +199,7 @@ net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4),
 
 
 if (str(sys.argv[3]) == 'loading'):
-    loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/'+str(sys.argv[4])+'/mse/'
+    loading_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/'+str(sys.argv[4])+'/loss/'
     print(loading_path)
     latest = tf.train.latest_checkpoint(loading_path)
     net.load_weights(latest)

@@ -177,10 +177,10 @@ def boxplot_func(df_in, x, y, z,
     fig, axes = plt.subplots(3,1, figsize=(5,4), gridspec_kw={'height_ratios': [1, 3, 1]})
     
     if x_scale == 'log':
-        sns.distplot(np.log10(df_plot[x]), ax=axes[0], color='0.8')
+        sns.distplot(np.log10(df_plot[x]), kde = False,  ax=axes[0], color='0.5')
         axes[0].set_xlim(np.log10(xlim[0]), np.log10(xlim[1]))
     else:
-        sns.distplot(df_plot[x], ax=axes[0], color='0.8')
+        sns.distplot(df_plot[x],  kde = False, ax=axes[0], color='0.5')
         axes[0].set_xlim(xlim[0], xlim[1])
     
     axes[0].set_yticks([])
