@@ -441,13 +441,16 @@ def create_model_wo_ls_peak_pooling_no_psf(input_shape, latent_dim, hidden_dim, 
         h = PReLU()(h)
     h = Flatten()(h)
     h = PReLU()(h)
-
+    h = Dense(256)(h)
+    h = PReLU()(h)
     h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),
                 activation=None)(tf.cast(h,tf.float64))
     h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
     model = Model([input_layer_1, input_layer_2],h)
 
     return model
+
+
 
 
 tfd = tfp.distributions
@@ -588,6 +591,41 @@ def get_posterior_fn():
       )
 # kernel divergence weight in loss
 kernel_divergence_fn=(lambda q, p, ignore: tfd.kl_divergence(q, p) / (100000))
+
+def create_model_prob_flipout_peak_no_psf(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
+    input_layer_1 = Input(shape=(input_shape)) 
+    input_layer_2 = Input(shape=(input_shape)) 
+    # Encoding part
+    #h = tf.keras.layers.concatenate([input_layer_1, tf.keras.layers.multiply([input_layer_1, input_layer_2])], axis=-1)
+    h = BatchNormalization()(input_layer_1)
+    #h = BatchNormalization()(h)
+    h_2 = input_layer_2
+    for i in range(len(filters)):
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same')(h)
+        h = PReLU()(h)
+        h = Conv2D(filters[i], (kernels[i],kernels[i]), activation=None, padding='same', strides=(2,2))(h)
+        h = PReLU()(h)
+
+    #h = tf.keras.layers.concatenate([h, h_2], axis =-1)
+
+    h = Flatten()(h)
+    h = PReLU()(h)
+    h = tfp.layers.DenseFlipout(256, 
+                                kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                kernel_divergence_fn = kernel_divergence_fn,
+                                activation=None)(h)
+    h = PReLU()(h)
+    h = tfp.layers.DenseFlipout(tfp.layers.MultivariateNormalTriL.params_size(final_dim), 
+                                    kernel_posterior_fn=ktied_distribution.get_ktied_posterior_fn(),
+                                    kernel_divergence_fn = kernel_divergence_fn,
+                                    activation=None)(h)
+    h = tfp.layers.MultivariateNormalTriL(final_dim)(h)
+
+    model = Model([input_layer_1, input_layer_2],h)
+
+    return model
+
+
 
 def create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None):
     input_layer_1 = Input(shape=(input_shape)) 

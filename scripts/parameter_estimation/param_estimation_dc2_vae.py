@@ -204,6 +204,10 @@ if (str(sys.argv[3]) == 'loading'):
     latest = tf.train.latest_checkpoint(loading_path)
     net.load_weights(latest)
 
+if (sys.argv[1] == 'noisy'):
+    # set the decoder as non trainable
+    for i in range (len(net.layers[45:])):
+        net.layers[45+i].trainable = False
 
 # Callbacks
 saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/'+str(sys.argv[2])

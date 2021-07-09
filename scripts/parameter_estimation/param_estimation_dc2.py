@@ -64,17 +64,28 @@ if model_choice == 'wo_ls_concat_one':
     net = model.create_model_wo_ls_peak_pooling_concat_one(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
     #net = model.create_model_shear(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 if model_choice == 'full_prob_flipout':
-    net = model.create_model_prob_flipout_peak(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
+    net = model.create_model_prob_flipout_peak_no_psf(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 if model_choice == 'cyrille':
     net = model.create_model_cyrille(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 if model_choice == 'no_psf_dense':
     net = model.create_model_no_psf_dense(input_shape, latent_dim, hidden_dim, filters, kernels, final_dim, conv_activation=None, dense_activation=None)
 
+if model_choice == 'redshift':
+    net = model.create_model_wo_ls_peak_pooling_no_psf(input_shape, latent_dim, hidden_dim, filters, kernels, 1, conv_activation=None, dense_activation=None)
+if model_choice == 'redshift_bnn':
+    net = model.create_model_prob_flipout_peak_no_psf(input_shape, latent_dim, hidden_dim, filters, kernels, 1, conv_activation=None, dense_activation=None)
+
+if model_choice == 'redshift_ellipticity':
+    net = model.create_model_wo_ls_peak_pooling_no_psf(input_shape, latent_dim, hidden_dim, filters, kernels, 3, conv_activation=None, dense_activation=None)
+if model_choice == 'redshift_ellipticity_bnn':
+    net = model.create_model_prob_flipout_peak_no_psf(input_shape, latent_dim, hidden_dim, filters, kernels, 3, conv_activation=None, dense_activation=None)
+
+
 net.summary()
 #net.layers[-1].trainable = False
 
 #### Loss definition
-alpha = K.variable(0.)
+alpha = K.variable(1.)
 
 if model_choice == 'full_prob_rt' or model_choice == 'full_prob_flipout':
     kl = sum(net.losses)
@@ -100,7 +111,7 @@ maepercent = tf.keras.losses.MeanAbsolutePercentageError()
 mae = tf.keras.losses.MeanAbsoluteError()
 mselog = tf.keras.losses.MeanSquaredLogarithmicError()
 
-net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5),
+net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4),
               loss=negative_log_likelihood,
               metrics = ['mse', 'acc',kl_metric],
               experimental_run_tf_function=False)
@@ -126,7 +137,7 @@ list_of_samples = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'tr
 list_of_samples_val = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'validation/')) if x.startswith(os.path.join(images_dir,'validation/')+'img_cropped_sample_')]
 #list_of_samples_test = [x for x in utils.listdir_fullpath(os.path.join(images_dir,'test')) if x.endswith('img_sample.npy')]#mag_24.5
 print(list_of_samples)
-training_generator = generator.BatchGenerator_dc2_deconvolution(bands,#BatchGenerator_dc2_deconv_noisy_2
+training_generator = generator.BatchGenerator_redshift_ellipticity(bands,#BatchGenerator_dc2_deconv_noisy_2
                                     images_dir,
                                     list_of_samples, 
                                     total_sample_size=None,
@@ -137,10 +148,24 @@ training_generator = generator.BatchGenerator_dc2_deconvolution(bands,#BatchGene
                                     list_of_weights_e=None,
                                     net = net,
                                     saving_path = saving_path,
-                                    prop = 0,
-                                    step_size = step_size)
+                                    prop = 10,
+                                    step_size = step_size)#BatchGenerator_redshift
 
-validation_generator = generator.BatchGenerator_dc2_deconvolution(bands,#BatchGenerator_dc2_reconvolution
+validation_generator = generator.BatchGenerator_redshift_ellipticity(bands,
+                                    images_dir,
+                                    list_of_samples_val, 
+                                    total_sample_size=None,
+                                    batch_size=batch_size, 
+                                    trainval_or_test='validation',
+                                    do_norm=False,
+                                    denorm = False,
+                                    list_of_weights_e=None,
+                                    net = net,
+                                    saving_path = saving_path,
+                                    prop = 10,
+                                    step_size = step_size)#BatchGenerator_dc2_reconvolution
+
+test_generator = generator.BatchGenerator_redshift_ellipticity(bands, 
                                     images_dir,
                                     list_of_samples_val, 
                                     total_sample_size=None,
@@ -152,21 +177,7 @@ validation_generator = generator.BatchGenerator_dc2_deconvolution(bands,#BatchGe
                                     net = net,
                                     saving_path = saving_path,
                                     prop = 0,
-                                    step_size = step_size)
-
-test_generator = generator.BatchGenerator_dc2_deconvolution(bands, #BatchGenerator_dc2_reconvolution
-                                    images_dir,
-                                    list_of_samples_val, 
-                                    total_sample_size=None,
-                                    batch_size=batch_size, 
-                                    trainval_or_test='validation',
-                                    do_norm=False,
-                                    denorm = False,
-                                    list_of_weights_e=None,
-                                    net = net,
-                                    saving_path = saving_path,
-                                    prop = 0,
-                                    step_size = step_size)
+                                    step_size = step_size)#BatchGenerator_dc2_reconvolution
 
 
 print('construction OK')
@@ -199,10 +210,9 @@ class save_model_step(Callback):
         self.network = network
     
     def on_epoch_end(self, network, save_path):
-        #print(self.step_siz)
-        print(self.save_path)
         if (self.epoch == self.step_siz):
             self.epoch =0
+            print(self.save_path)
             self.network.save_weights(self.save_path+'cp-'+str(self.epoch)+'.ckpt')
         self.epoch +=1
         #print(self.epoch)

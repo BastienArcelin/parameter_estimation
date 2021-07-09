@@ -230,7 +230,7 @@ dense_activation = None
 bands = [0,1,2,3,4,5]
 
 
-saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v_param_from_vae_nf'
+saving_path = '/sps/lsst/users/barcelin/TFP/weights/test_dc2/v_param_from_vae_nf_no_weights'
 step_size = 10
 
 
@@ -280,16 +280,16 @@ h = encoder([input_layer_1,input_layer_2])
 
 #h = tfp.layers.MultivariateNormalTriL(32,activity_regularizer=tfp.layers.KLDivergenceRegularizer(prior, weight=0.01))(tf.cast(h,tf.float32))
 
-h = Dense(256, activation = 'tanh')(h)
-h = Dense(256, activation = 'tanh')(h)
-h = Dense(256, activation = None)(h)
-h = PReLU()(h)
-h = Dense(128, activation = None)(h)
+#h = Dense(256, activation = 'tanh')(h)
+#h = Dense(256, activation = 'tanh')(h)
+# = Dense(256, activation = None)(h)
+##h = PReLU()(h)
+#h = Dense(128, activation = None)(h)
 h = PReLU()(h)
 
 h = Dense(tfp.layers.MultivariateNormalTriL.params_size(final_dim),activation=None)(h)
 #h = Dense(2)(h)#
-h = tfp.layers.MultivariateNormalTriL(final_dim, activity_regularizer=tfp.layers.KLDivergenceRegularizer(distrib_nf, weight=0.5,use_exact_kl=False))(h)#, test_points_fn=lambda s: s.sample(100)))(h)#tfp.distributions.Sample(distrib_nf))))(h), test_points_fn=distrib_nf.sample(1)
+h = tfp.layers.MultivariateNormalTriL(final_dim)(h)#, test_points_fn=lambda s: s.sample(100)))(h)#tfp.distributions.Sample(distrib_nf))))(h), test_points_fn=distrib_nf.sample(1)
 #h = nf([h])
     
 param_estim_net =  Model((input_layer_1, input_layer_2), h)
@@ -298,9 +298,9 @@ param_estim_net =  Model((input_layer_1, input_layer_2), h)
 #param_estim_net = param_estimation_net(vae, encoder, final_dim, nf)
 param_estim_net.summary()
 
-loading_path = '/pbs/home/b/barcelin/sps_link/TFP/weights/test_dc2/v_param_from_vae/loss/'
+loading_path = '/pbs/home/b/barcelin/sps_link/TFP/weights/test_dc2/v_param_from_vae_nf_no_weights/loss/'
 latest = tf.train.latest_checkpoint(loading_path)
-#param_estim_net.load_weights(latest)
+param_estim_net.load_weights(latest)
 
 
 
@@ -310,7 +310,7 @@ def kl_metric(y_true, y_pred):
 negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)
 mse = tf.keras.losses.MeanSquaredError()
 
-param_estim_net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-5), 
+param_estim_net.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-4), 
               loss=negative_log_likelihood,
               metrics = ['mse', 'acc',kl_metric],
               experimental_run_tf_function=False,
@@ -396,8 +396,8 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         
         if self.trainval_or_test == 'validation':
             self.data_path = os.path.join(self.path,'validation/')
-            self.list_of_samples_noiseless = [x for x in listdir_fullpath(self.data_path) if x.startswith(self.data_path+'img_noiseless_sample_')]
-            self.list_of_samples_noisy = [x for x in listdir_fullpath(self.data_path) if x.startswith(self.data_path+'img_cropped_sample_')]
+            self.list_of_samples_noiseless = [x for x in listdir_fullpath(self.data_path) if x.startswith(self.data_path+'img_noiseless_sample_1')]
+            self.list_of_samples_noisy = [x for x in listdir_fullpath(self.data_path) if x.startswith(self.data_path+'img_cropped_sample_1')]
 
         if self.trainval_or_test == 'test':
             self.data_path = os.path.join(self.path,'test/')
@@ -457,7 +457,7 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         
         #data = data.dropna(axis = 0, how = 'any')
 
-        data['weights']=1#np.exp(5*data['blendedness'])#np.sqrt(np.abs(data['e1'])+np.abs(data['e2']))
+        data['weights']=(np.abs(data['e1'])+np.abs(data['e2']))#np.exp(5*data['blendedness'])#np.sqrt(np.abs(data['e1'])+np.abs(data['e2']))
         #print(data['weights'])
         #print(np.min(data['weights']), np.max(data['weights']))
 
@@ -467,11 +467,11 @@ class BatchGenerator_dc2_deconv_noisy_2(tensorflow.keras.utils.Sequence):
         shear_2 = np.array(data['shear_2'])
         convergence = np.array(data['convergence'])
         
-        ellipticity = calc_lensed_ellipticity(ell_1, ell_2, shear_1, shear_2, convergence)
+        ellipticity = calc_lensed_ellipticity(-ell_1, ell_2, -shear_1, shear_2, convergence)
         ellipticity_conversion = lambda e: 2*e / (1.0+ellipticity[:len(e)]*ellipticity[:len(e)])
 
-        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(ell_1, ell_2, shear_1, shear_2, convergence))
-        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(ell_1, ell_2, shear_1, shear_2, convergence))
+        ellipticity_1 = ellipticity_conversion(calc_lensed_ellipticity_1(-ell_1, ell_2, -shear_1, shear_2, convergence))
+        ellipticity_2 = ellipticity_conversion(calc_lensed_ellipticity_2(-ell_1, ell_2, -shear_1, shear_2, convergence))
 
         data['ellipticity_1_lensed'] = ellipticity_1
         data['ellipticity_2_lensed'] = ellipticity_2
@@ -544,7 +544,7 @@ training_generator = BatchGenerator_dc2_deconv_noisy_2(bands,
                                     list_of_weights_e=None,
                                     net = param_estim_net,
                                     saving_path = saving_path,
-                                    prop = 1,
+                                    prop = 10,
                                     step_size = step_size)
 
 validation_generator = BatchGenerator_dc2_deconv_noisy_2(bands,
@@ -558,14 +558,14 @@ validation_generator = BatchGenerator_dc2_deconv_noisy_2(bands,
                                     list_of_weights_e=None,
                                     net = param_estim_net,
                                     saving_path = saving_path,
-                                    prop = 1,
+                                    prop = 10,
                                     step_size = step_size)
 
 
 # Callbacks
-checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mse:.2f}.ckpt', monitor='val_mean_squared_error', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
+checkpointer_mse = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/mse/weights_noisy_v4.{epoch:02d}-{val_mse:.2f}.ckpt', monitor='val_mse', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)#mse en TF2
 checkpointer_loss = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/loss/weights_noisy_v4.{epoch:02d}-{val_loss:.2f}.ckpt', monitor='val_loss', verbose=1, save_best_only=True,save_weights_only=True, mode='min', period=1)
-#checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
+checkpointer_acc = tf.keras.callbacks.ModelCheckpoint(filepath=saving_path+'/acc/weights_noisy_v4.{epoch:02d}-{val_acc:.2f}.ckpt', monitor='val_acc', verbose=1, save_best_only=True,save_weights_only=True, mode='max', period=1)
 
 from tensorflow.keras.callbacks import Callback
 #print(saving_path)
@@ -579,8 +579,9 @@ class save_model_step(Callback):
     
     def on_epoch_end(self, network, save_path):
         #print(self.step_siz)
-        print(self.save_path)
+        
         if (self.epoch == self.step_siz):
+            print(self.save_path)
             self.epoch =0
             self.network.save_weights(self.save_path+'cp-'+str(self.epoch)+'.ckpt')
         self.epoch +=1
@@ -588,7 +589,7 @@ class save_model_step(Callback):
 
 cb = save_model_step(param_estim_net, saving_path, step_size)
 
-callbacks = [checkpointer_mse, checkpointer_loss, cb]#, checkpointer_acc]#, alpha_changer]#, alpha_changer]#, WandbCallback()]#, alpha_changer]
+callbacks = [checkpointer_mse, checkpointer_loss, cb, checkpointer_acc]#, alpha_changer]#, alpha_changer]#, WandbCallback()]#, alpha_changer]
 
 
 ######## Train the network
